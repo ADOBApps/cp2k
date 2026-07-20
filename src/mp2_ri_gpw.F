@@ -123,6 +123,7 @@ CONTAINS
 
       CALL timeset(routineN, handle)
 
+      !================= I CAN IGNORE IT
       IF (mp2_env%ri_mp2%use_c_backend) THEN
          CPASSERT(SIZE(BIb_C)==1)
          CALL get_group_dist(gd_B_virtual(ispin), para_env_sub%mepos, &
@@ -295,6 +296,7 @@ CONTAINS
 
                      send_ij_index = num_ij_pairs(proc_send)
 
+                     ! I CAN IGNORE IT
                      CALL get_group_dist(gd_array, proc_receive, sizes=rec_L_size)
 
                      IF (ij_index <= send_ij_index) THEN
@@ -358,6 +360,7 @@ CONTAINS
 
                            ! calculate the integrals (ia|jb) strating from my local data ...
                            local_ab = 0.0_dp
+                           !=========== I CAN IGNORE IT
                            IF ((my_alpha_beta_case) .AND. (calc_forces)) THEN
                               local_ba = 0.0_dp
                            END IF
@@ -366,6 +369,8 @@ CONTAINS
                                                             my_local_i_aL, dimen_RI, my_local_j_aL, dimen_RI, &
                                                            0.0_dp, local_ab(my_B_virtual_start(ispin):my_B_virtual_end(ispin), :), &
                                                             my_B_size(ispin))
+
+                           !================= I CAN IGNORE IT
                            ! Additional integrals only for alpha_beta case and forces
                            IF (my_alpha_beta_case .AND. calc_forces) THEN
                               local_ba(my_B_virtual_start(jspin):my_B_virtual_end(jspin), :) = &
@@ -385,11 +390,13 @@ CONTAINS
                               CALL para_env_sub%sendrecv(my_local_i_aL, proc_send, &
                                                          external_i_aL, proc_receive, tag)
 
+                              ! PENDING TO CHECK
                               CALL mp2_env%local_gemm_ctx%gemm( &
                                  'T', 'N', rec_B_size, my_B_size(jspin), dimen_RI, 1.0_dp, &
                                  external_i_aL, dimen_RI, my_local_j_aL, dimen_RI, &
                                  0.0_dp, local_ab(rec_B_virtual_start:rec_B_virtual_end, 1:my_B_size(jspin)), rec_B_size)
 
+                              !================= I CAN IGNORE IT
                               ! Additional integrals only for alpha_beta case and forces
                               IF (my_alpha_beta_case .AND. calc_forces) THEN
 
@@ -407,6 +414,8 @@ CONTAINS
                                             0.0_dp, local_ba(rec_B_virtual_start:rec_B_virtual_end, 1:my_B_size(ispin)), rec_B_size)
                               END IF
                            END DO
+
+                           !================= I CAN IGNORE IT
                            IF (my_alpha_beta_case .AND. calc_forces) THEN
                               ! Is just an approximation, but the call does not allow it,
                               ! it ought to be (virtual_i*B_size_j+virtual_j*B_size_i)*dimen_RI
@@ -433,6 +442,7 @@ CONTAINS
                               END DO
                            END DO
 
+                           !================= I CAN IGNORE IT
                            IF (calc_ex) THEN
                               ! contract integrals with orbital energies for exchange MP2 energy
                               ! starting with local ...
@@ -465,8 +475,8 @@ CONTAINS
                                  external_ab(1:my_B_size(ispin), 1:rec_B_size) => &
                                     buffer_1D(1:INT(rec_B_size, int_8)*my_B_size(ispin))
                                  external_ab = 0.0_dp
-
-                      CALL para_env_sub%sendrecv(local_ab(send_B_virtual_start:send_B_virtual_end, 1:my_B_size(ispin)), proc_send, &
+                      
+                                 CALL para_env_sub%sendrecv(local_ab(send_B_virtual_start:send_B_virtual_end, 1:my_B_size(ispin)), proc_send, &
                                                             external_ab(1:my_B_size(ispin), 1:rec_B_size), proc_receive, tag)
 
                                  DO b = 1, my_B_size(ispin)
@@ -488,6 +498,7 @@ CONTAINS
                            END IF
                            CALL timestop(handle3)
 
+                           !================= I CAN IGNORE IT
                            IF (calc_forces) THEN
                               ! update P_ab, Gamma_P_ia
                               CALL mp2_update_P_gamma(mp2_env, para_env_sub, gd_B_virtual, &
@@ -536,6 +547,7 @@ CONTAINS
                END IF
 
                ! redistribute gamma
+               !================= I CAN IGNORE IT
                IF (calc_forces) THEN
                   CALL mp2_redistribute_gamma(mp2_env%ri_grad%Gamma_P_ia(ispin)%array, ij_index, my_B_size(ispin), &
                                               my_block_size, my_group_L_size, my_i, my_ij_pairs, ngroup, &
@@ -558,6 +570,7 @@ CONTAINS
             DEALLOCATE (num_ij_pairs)
             DEALLOCATE (local_ab)
 
+            !================= I CAN IGNORE IT
             IF (calc_forces) THEN
                DEALLOCATE (Y_i_aP)
                DEALLOCATE (Y_j_aP)
@@ -588,6 +601,7 @@ CONTAINS
             ! Dereplicate BIb_C and Gamma_P_ia to save memory
             ! These matrices will not be needed in that fashion anymore
             ! B_ia_Q will needed later
+            !================= I CAN IGNORE IT
             IF (calc_forces .AND. jspin == nspins) THEN
                IF (.NOT. ALLOCATED(B_ia_Q)) ALLOCATE (B_ia_Q(nspins))
                ALLOCATE (B_ia_Q(ispin)%array(homo(ispin), my_B_size(ispin), my_group_L_size_orig))
@@ -627,9 +641,11 @@ CONTAINS
                DEALLOCATE (BIb_C(ispin)%array)
             END IF
 
+            !===== I CAN USE cp_mpi_sum family (review var kind)
             CALL para_env%sum(my_Emp2_Cou)
             CALL para_env%sum(my_Emp2_Ex)
 
+            !================= I CAN IGNORE IT
             IF (my_open_shell_SS .OR. my_alpha_beta_case) THEN
                IF (my_alpha_beta_case) THEN
                   Emp2_S = Emp2_S + my_Emp2_Cou
@@ -642,6 +658,7 @@ CONTAINS
                   Emp2_EX = Emp2_EX + my_Emp2_EX
                END IF
             ELSE
+            !================= ADD THIS PART
                Emp2_Cou = Emp2_Cou + my_Emp2_Cou
                Emp2_EX = Emp2_EX + my_Emp2_EX
             END IF
@@ -652,9 +669,11 @@ CONTAINS
       DEALLOCATE (integ_group_pos2color_sub)
       DEALLOCATE (ranges_info_array)
 
+      ! ============ REPLACE WITH cp_mpi_comm_free
       CALL comm_exchange%free()
       CALL comm_rep%free()
 
+      !================= I CAN IGNORE IT
       IF (calc_forces) THEN
          ! recover original information (before replication)
          DEALLOCATE (gd_array%sizes)
@@ -691,20 +710,24 @@ CONTAINS
          END BLOCK
       END IF
 
+      !================= I CAN IGNORE IT
       CALL release_group_dist(gd_array)
       DO ispin = 1, nspins
          IF (ALLOCATED(BIb_C(ispin)%array)) DEALLOCATE (BIb_C(ispin)%array)
          CALL release_group_dist(gd_B_virtual(ispin))
       END DO
 
+      !================= I CAN IGNORE IT
       ! We do not need this matrix later, so deallocate it here to safe memory
       IF (calc_forces) DEALLOCATE (mp2_env%ri_grad%PQ_half)
       IF (calc_forces .AND. .NOT. compare_potential_types(mp2_env%ri_metric, mp2_env%potential_parameter)) THEN
          DEALLOCATE (mp2_env%ri_grad%operator_half)
       END IF
 
+      !================= I CAN IGNORE IT
       CALL dgemm_counter_write(dgemm_counter, para_env)
 
+      !================= REVIEW LATER
       ! release memory allocated by local_gemm when run on GPU. local_gemm_ctx is null on cpu only runs
       CALL mp2_env%local_gemm_ctx%destroy()
       CALL timestop(handle)
@@ -949,6 +972,7 @@ CONTAINS
       ALLOCATE (local_j_aL(dimen_RI, my_B_size(jspin), block_size))
       local_j_aL = 0.0_dp
 
+      
       IF (calc_forces) THEN
          ALLOCATE (Y_i_aP(my_B_size(ispin), dimen_RI, block_size))
          Y_i_aP = 0.0_dp

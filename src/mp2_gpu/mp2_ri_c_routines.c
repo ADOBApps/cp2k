@@ -5,7 +5,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cp_mpi.h"
+#include "../mpiwrap/cp_mpi.h"
+
 // I use it like a timer
 #include "../offload/offload_library.h"
 
@@ -1107,19 +1108,10 @@ void c_mp2_ri_communication(
     int first_J_block = block_size + 1;
     int last_J_block = block_size * (num_IJ_blocks + 1);
 
-    /**
-     * 
-         ij_block_counter = 0
-         DO iiB = first_I_block, last_i_block, block_size
-            DO jjB = iiB + block_size, last_J_block, block_size
-               ij_block_counter = ij_block_counter + 1
-            END DO
-         END DO
-     */
     // Count block pairs
     int ij_block_counter = 0;
-    for (int iiB = first_I_block; iiB <= last_i_block; iiB += block_size) {
-        for (int jjB = iiB + block_size + 1; jjB <= last_J_block; jjB += block_size) {
+    for (int iiB = first_I_block; iiB < last_i_block; iiB += block_size) {
+        for (int jjB = iiB + block_size + 1; jjB < last_J_block; jjB += block_size) {
             ij_block_counter++;
         }
     }
@@ -1129,12 +1121,14 @@ void c_mp2_ri_communication(
     int assigned_blocks = num_block_per_group * ngroup;
     int total_ij_pairs_blocks = assigned_blocks + (total_ij_pairs - assigned_blocks * (block_size * block_size));
 
-    // ALLOCATE (ij_marker(homo, homo))
-    // ij_marker = .TRUE.
-    // array row-major flattened 1D
-    // According with some forums benefits by memory, single allocation and dynamic access 
-    // bool* arr = malloc(rows * cols * sizeof(bool));
-    // to access: arr[i * cols + j]
+    /**
+     * ALLOCATE (ij_marker(homo, homo))
+     * ij_marker = .TRUE.
+     * array row-major flattened 1D
+     * According with some forums benefits by memory, single allocation and dynamic access 
+     * bool* arr = malloc(rows * cols * sizeof(bool));
+     * to access: arr[i * cols + j]
+     */
     bool* ij_marker = (bool*)malloc(homo * homo * sizeof(bool));
     for (int i = 0; i < homo * homo; i++) {
         ij_marker[i] = true;
@@ -1147,31 +1141,17 @@ void c_mp2_ri_communication(
     int ij_counter = 0;
     *my_ij_pairs = 0;
 
-    /**
-     * 
-         DO iiB = first_I_block, last_i_block, block_size
-            DO jjB = iiB + block_size, last_J_block, block_size
-               IF (ij_counter + 1 > assigned_blocks) EXIT
-               ij_counter = ij_counter + 1
-               ij_marker(iiB:iiB + block_size - 1, jjB:jjB + block_size - 1) = .FALSE.
-               ij_map(1, ij_counter) = iiB
-               ij_map(2, ij_counter) = jjB
-               ij_map(3, ij_counter) = block_size
-               IF (MOD(ij_counter, ngroup) == color_sub) my_ij_pairs = my_ij_pairs + 1
-            END DO
-         END DO
-     */
-    for (int iiB = first_I_block; iiB <= last_i_block; iiB += block_size) {
-        for (int jjB = iiB + block_size; jjB <= last_J_block; jjB += block_size) {
+    for (int iiB = first_I_block; iiB < last_i_block; iiB += block_size) {
+        for (int jjB = iiB + block_size; jjB < last_J_block; jjB += block_size) {
             // exit
             if (ij_counter + 1 > assigned_blocks) {break;}
             ij_counter++;
 
             // ij_marker(iiB:iiB + block_size - 1, jjB:jjB + block_size - 1) = .FALSE.
             // i = iiB - 1 (index 0 in C)
-            for (int i = iiB - 1; i < iiB + block_size - 1; i++) {
+            for (int i = iiB; i < iiB + block_size - 1; i++) {
                 // j = jjB - 1 (index 0 in C)
-                for (int j = jjB - 1; j < jjB + block_size - 1; j++) {
+                for (int j = jjB; j < jjB + block_size - 1; j++) {
                     ij_marker[i * homo + j] = false;
                 }
 
@@ -1184,30 +1164,15 @@ void c_mp2_ri_communication(
                 }
             }
 
-            /**
-             * 
-         DO iiB = 1, homo
-            DO jjB = iiB, homo
-               IF (ij_marker(iiB, jjB)) THEN
-                  ij_counter = ij_counter + 1
-                  ij_map(1, ij_counter) = iiB
-                  ij_map(2, ij_counter) = jjB
-                  ij_map(3, ij_counter) = 1
-                  IF (MOD(ij_counter, ngroup) == color_sub) my_ij_pairs = my_ij_pairs + 1
-               END IF
-            END DO
-         END DO
-         DEALLOCATE (ij_marker)
-             */
-            for (int iiB = 1; iiB <= homo; iiB++) {
-                for (int jjB = iiB; jjB <= homo; jjB++) {
+            for (int iiB = 1; iiB < homo; iiB++) {
+                for (int jjB = iiB; jjB < homo; jjB++) {
                     // to access: arr[i * cols + j]
                     // 0-based in C-stlr
                     if (ij_marker[(iiB - 1) * homo + (jjB - 1)]) {
                         ij_counter++;
                         (*ij_map)[0 * total_ij_pairs_blocks + (ij_counter -1)] = iiB;
                         (*ij_map)[1 * total_ij_pairs_blocks + (ij_counter -1)] = jjB;
-                        (*ij_map)[3 * total_ij_pairs_blocks + (ij_counter -1)] = 1;
+                        (*ij_map)[2 * total_ij_pairs_blocks + (ij_counter -1)] = 1;
 
                         if ((ij_counter % ngroup) == color_sub) {
                             (*my_ij_pairs)++;
@@ -1218,23 +1183,529 @@ void c_mp2_ri_communication(
             free(ij_marker);
         }
     }
-    
-    
-    /**
-     * ============================ Should I also add this part?
-         IF (unit_nr > 0) THEN
-         IF (block_size == 1) THEN
-            WRITE (UNIT=unit_nr, FMT="(T3,A,T66,F15.1)") &
-               "RI_INFO| Percentage of ij pairs communicated with block size 1:", 100.0_dp
-         ELSE
-            WRITE (UNIT=unit_nr, FMT="(T3,A,T66,F15.1)") &
-               "RI_INFO| Percentage of ij pairs communicated with block size 1:", &
-               100.0_dp*REAL((total_ij_pairs - assigned_blocks*(block_size**2)), KIND=dp)/REAL(total_ij_pairs, KIND=dp)
-         END IF
-         CALL m_flush(unit_nr)
-      END IF
-     */
+
+    if (unit_nr > 0) {
+        if (block_size == 1) {
+            printf("RI_INFO| Percentage of ij pairs communicated with block size 1: 100.0\n");
+        } else {
+            double percentage = 100.0 * (double)((*total_ij_pairs - assigned_blocks * (block_size * block_size))) /  (double)(*total_ij_pairs);
+            printf("RI_INFO| Percentage of ij pairs communicated with block size 1: %.1f\n", percentage);
+        }
+    }
 
     // Stop timer
     offload_timestop();
+}
+
+/**
+ * SUBROUTINE mp2_ri_allocate_blk(dimen_RI, my_B_size, block_size, &
+                                  local_i_aL, local_j_aL, calc_forces, &
+                                  Y_i_aP, Y_j_aP, ispin, jspin)
+      INTEGER, INTENT(IN)                                :: dimen_RI, my_B_size(2), block_size
+      REAL(KIND=dp), ALLOCATABLE, DIMENSION(:, :, :), &
+         INTENT(OUT)                                     :: local_i_aL, local_j_aL
+      LOGICAL, INTENT(IN)                                :: calc_forces
+      REAL(KIND=dp), ALLOCATABLE, DIMENSION(:, :, :), &
+         INTENT(OUT)                                     :: Y_i_aP, Y_j_aP
+      INTEGER, INTENT(IN)                                :: ispin, jspin
+
+      CHARACTER(LEN=*), PARAMETER :: routineN = 'mp2_ri_allocate_blk'
+ * ____________________________________________________________________________________________________________
+ * |                  FORTRAN-SIDE                   ||                   C-SIDE                              |
+ * |_________________________________________________||_______________________________________________________|
+ * |   (VAR TYPE) |(INTENT) |       (VAR NAME)       ||    (VAR TYPE)      |(INTENT) |      (VAR NAME)        |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |   (INTEGER)  | (IN)    |      dimen_RI          ||      int           |         |      dimen_RI          |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * | (INTEGER(:)) | (IN)    |      my_B_size         ||      int*          | (const) |      my_B_size         |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |   (INTEGER)  | (IN)    |      block_size        ||       int          |         |      block_size        |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |   (LOGICAL)  | (IN)    |      calc_forces       ||       bool         |         |     calc_forces        |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |    (REAL)    |         |                        ||                    |         |                        |
+ * | (DIM(:,:,:)) |  (OUT)  |       local_i_aL       ||     double**       |  malloc |       local_i_aL       |
+ * | (ALLOCATABLE)|         |                        ||                    |         |                        |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |    (REAL)    |         |                        ||                    |         |                        |
+ * | (DIM(:,:,:)) |  (OUT)  |       local_j_aL       ||     double**       |  malloc |       local_j_aL       |
+ * | (ALLOCATABLE)|         |                        ||                    |         |                        |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |    (REAL)    |         |                        ||                    |         |                        |
+ * | (DIM(:,:,:)) |  (OUT)  |        Y_i_aP          ||     double**       |  malloc |        Y_i_aP          |
+ * | (ALLOCATABLE)|         |                        ||                    |         |                        |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |    (REAL)    |         |                        ||                    |         |                        |
+ * | (DIM(:,:,:)) |  (OUT)  |        Y_j_aP          ||     double**       |  malloc |        Y_j_aP          |
+ * | (ALLOCATABLE)|         |                        ||                    |         |                        |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |   (INTEGER)  | (IN)    |         ispin          ||       int          |         |         ispin          |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * |   (INTEGER)  | (IN)    |         jspin          ||       int          |         |         jspin          |
+ * |______________|_________|________________________||____________________|_________|________________________|
+ * 
+ * // INPUT
+ * int dimen_RI,         // Numeber of RI basis functions
+ * const int* my_B_size, // Virtual orbitals per spin (2)
+ * int block_size,       // Occupied orbital block size
+ * int ispin,            // Spin index for i
+ * int jspin,            // Spin index for j
+ * 
+ * // OUTPUT (I need allocate it)
+ * double** local_i_aL,  // (Could flatten like 2D)
+ * double** local_j_aL,  // (Could flatten like 2D)
+ * double** Y_i_aP,      // skip
+ * double** Y_j_aP       // skip
+ * 
+ */
+void c_mp2_ri_allocate_blk(
+    int dimen_RI,
+    const int* my_B_size,
+    int block_size,
+    int ispin,
+    int jspin,
+    double** local_i_aL,
+    double** local_j_aL,
+    double** Y_i_aP,
+    double** Y_j_aP
+){
+
+    // Start timer
+    offload_timeset("mp2_ri_allocate_blk\0");
+
+    // Convert Fortran 1-based to C 0-based
+    int i = ispin - 1;
+    int j = jspin - 1;
+    /**
+     * Fortran: (dim1, dim2m2, dim3) (colum-major)
+     * ALLOCATE (local_i_aL(dimen_RI, my_B_size(ispin), block_size))
+     * local_i_aL = 0.0_dp
+     * 
+     * C: [dim3][dim2][dim1] (row-major) 
+     * flattenf like [block_size][my_B_size(ispin)][dimen_RI]
+     * 
+     * double* arr = malloc(dim1 * dim2 * dim3 * sizeof(double));
+     * to access: arr[i * cols + j]
+     */
+    *local_i_aL = (double*)calloc(block_size * my_B_size[i] * dimen_RI, sizeof(double));
+
+     /**
+      * ALLOCATE (local_j_aL(dimen_RI, my_B_size(jspin), block_size))
+      * local_j_aL = 0.0_dp
+      */
+    *local_i_aL = (double*)calloc(block_size * my_B_size[j] * dimen_RI, sizeof(double));
+
+    // Stop timer
+    offload_timestop();
+}
+
+/**
+ * 
+____________________________________________________________________________________________________________
+|    Fortran     |            C (IN)            |             C (OUT)             |       C (INOUT)        |
+|________________|______________________________|_________________________________|________________________|
+| `INTEGER`      |            `int`             |             `int*`              |         `int*`         |
+|________________|______________________________|_________________________________|________________________|
+| `REAL`         |             `double`         |          `double*`              |        `double*`       |
+|________________|______________________________|_________________________________|________________________|
+| `LOGICAL`      |            `bool`            |             `bool*`             |        `bool*`         |
+|________________|______________________________|_________________________________|________________________|
+| `INTEGER(:)`   | `const int*` + `int size`    |      `int*` + `int size`        |  `int*` + `int size`   |
+|________________|______________________________|_________________________________|________________________|
+| `REAL(:)`      | `const double*` + `int size` | `double**` (alloc) or `double*` | `double*` + `int size` |
+|________________|______________________________|_________________________________|________________________|
+| `TYPE`         |        Flatten to fields     |               N/A               |    N/A                 |
+|________________|______________________________|_________________________________|________________________|
+| `mp_comm_type` |         `cp_mpi_comm_t`      |         `cp_mpi_comm_t*`        |     `cp_mpi_comm_t*`   |
+|________________|______________________________|_________________________________|________________________|
+ * ______________________________________________________________________________________________
+ * |                  FORTRAN-SIDE                ||                  C-SIDE                    |
+ * |______________________________________________||____________________________________________|
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   (VAR TYPE)    |(INTENT) |   (VAR NAME)     ||    (VAR TYPE)    |      (VAR NAME)         |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   REAL(KIND=dp) | INOUT   | Emp2_Cou         ||    double*       | Emp2_Cou                |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   REAL(KIND=dp) | INOUT   | Emp2_EX          ||    double*       | Emp2_EX                 |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   REAL(KIND=dp) | INOUT   | Emp2_S           ||    double*       | Emp2_S                  |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   REAL(KIND=dp) | INOUT   | Emp2_T           ||    double*       | Emp2_T                  |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   TYPE(3D)      | INOUT   | BIb_C(:)         ||    double***     | BIb_C                   |
+ * |   (ALLOCATABLE) |         |                  ||    int*          | BIb_C_dims[L,virt,occ]  |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   TYPE(mp2_type)| IN      | mp2_env          ||    double        | mp2_memory              |
+ * |   (DERIVED)     |         |                  ||    int           | user_block_size         |
+ * |                 |         |                  ||    bool          | print_dgemm_info        |
+ * |                 |         |                  ||    double        | scale_S                 |
+ * |                 |         |                  ||    double        | scale_T                 |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   TYPE(mp_para) | IN      | para_env         ||    cp_mpi_comm_t | para_env_comm           |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   TYPE(mp_para) | IN      | para_env_sub     ||    cp_mpi_comm_t | para_env_sub_comm       |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   INTEGER       | IN      | color_sub        ||    int           | color_sub               |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   TYPE(gd_d1)   | INOUT   | gd_array         ||    const int*    | gd_array_sizes          |
+ * |   (DERIVED)     |         |                  ||    int           | gd_array_sizes_size     |
+ * |                 |         |                  ||    int           | maxsize_gd_array        |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   TYPE(gd_d1)   | INOUT   | gd_B_virtual(:)  ||    const int*    | gd_B_virtual_sizes      |
+ * |   (DERIVED)     |         |                  ||    int           | gd_B_virtual_sizes_size |
+ * |                 |         |                  ||    int           | maxsize_gd_B_virtual    |
+ * |                 |         |                  ||    int           | maxval_gd_B_virtual     |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   INTEGER(:)    | IN      | homo             ||    const int*    | homo                    |
+ * |                 |         |                  ||    int           | homo_size               |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   INTEGER       | IN      | nmo              ||    int           | nmo                     |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   REAL(KIND=dp) | IN      | Eigenval(:, :)   ||    const double* | Eigenval                |
+ * |   (2D array)    |         |                  ||    (flattened)   |                         |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   INTEGER       | IN      | dimen_RI         ||    int           | dimen_RI                |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   INTEGER       | IN      | unit_nr          ||    int           | unit_nr                 |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   LOGICAL       | IN      | calc_forces      ||    bool          | calc_forces             |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * |   LOGICAL       | IN      | calc_ex          ||    bool          | calc_ex                 |
+ * |_________________|_________|__________________||__________________|_________________________|
+ * 
+ * // Energy outputs
+ * double* Emp2_Cou,    // Coulomb MP2 energy
+ * double* Emp2_EX,     // Exchange MP2 energy
+ * double* Emp2_S,      // Same-spin MP2 energy
+ * double* Emp2_T,      // Triplet MP2 energy
+ * 
+ * // Integral data
+ * double*** BIb_C,     // B matrix: (dimen_RI x virtual x occupied)
+ * int* BIb_C_dims,     // [L_size, virtual, occupied] dimensions
+ * 
+ * // Environment
+ * double mp2_memory,   // mp2_env%mp2_memory
+ * int user_block_size, // mp2_env%ri_mp2%block_size
+ * bool print_dgemm_info, // mp2_env%ri_mp2%print_dgemm_info
+ * double scale_S,      // mp2_env%scale_S
+ * double scale_T,      // mp2_env%scale_T
+ * 
+ * // MPI communicators
+ * cp_mpi_comm_t para_env_comm,
+ * cp_mpi_comm_t para_env_sub_comm,
+ * 
+ * // Process info
+ * int color_sub,       // Process color within subgroup
+ * 
+ * // Group distribution
+ * const int* gd_array_sizes,
+ * int gd_array_sizes_size,
+ * int maxsize_gd_array,
+ * 
+ * // Virtual distribution
+ * const int* gd_B_virtual_sizes,
+ * int gd_B_virtual_sizes_size,
+ * int maxsize_gd_B_virtual,
+ * int maxval_gd_B_virtual,
+ * 
+ * // Orbitals
+ * const int* homo,     // Occupied orbitals [2]
+ * int homo_size,       // Number of spins
+ * const int* virtual_arr, // Virtual orbitals [2]
+ * int virtual_size,
+ * int maxval_virtual,
+ * 
+ * // Energies and other data
+ * const double* Eigenval, // Eigenvalues (nmo x nspins)
+ * int nmo,             // Total MOs
+ * int dimen_RI,        // RI basis size
+ * int unit_nr,         // Output unit number
+ * bool calc_forces,    // Whether forces are computed
+ * bool calc_ex         // Whether exchange is computed
+ */
+void mp2_ri_gpw_compute_en(
+    double* Emp2_Cou, double* Emp2_EX, double* Emp2_S,
+    double* Emp2_T, double*** BIb_C, int* BIb_C_dims,
+    double mp2_memory, int user_block_size, bool print_dgemm_info,
+    double scale_S, double scale_T, cp_mpi_comm_t para_env_comm,
+    cp_mpi_comm_t para_env_sub_comm,  int color_sub, const int* gd_array_sizes,
+    int gd_array_sizes_size, int maxsize_gd_array, const int* gd_B_virtual_sizes,
+    int gd_B_virtual_sizes_size, int maxsize_gd_B_virtual, int maxval_gd_B_virtual,
+    const int* homo, int homo_size, const int* virtual_arr,
+    int virtual_size, int maxval_virtual, const double* Eigenval,
+    int nmo, int dimen_RI, int unit_nr,
+    bool calc_forces, bool calc_ex
+) {
+    // Start timer
+    offload_timeset("mp2_ri_gpw_compute_en\0");
+    
+    int nspins = homo_size;
+
+    // ALLOCATE (virtual(nspins))
+    // virtual(:) = nmo - homo(:)
+    int* virtual = (int*)malloc(nspins * sizeof(int));
+    for (int s = 0; s < nspins; s++) {
+        virtual[s] = nmo - homo[s];
+    }
+    
+    // ALLOCATE (my_B_size(nspins), my_B_virtual_start(nspins), my_B_virtual_end(nspins))
+    int* my_B_size = (int*)malloc(nspins * sizeof(int));
+    int* my_B_virtual_start = (int*)malloc(nspins * sizeof(int));
+    int* my_B_virtual_end = (int*)malloc(nspins * sizeof(int));
+    
+    int para_env_size = cp_mpi_comm_size(para_env_comm);
+    int para_env_sub_size = cp_mpi_comm_size(para_env_sub_comm);
+    int ngroup = para_env_size / para_env_sub_size;
+    int my_group_L_start = 1;
+    int my_group_L_end = gd_array_sizes[color_sub];
+    int my_group_L_size = my_group_L_end - my_group_L_start + 1;
+
+    int integ_group_size = 0;
+    int ngroup_out = 0;
+    int num_integ_group = 0;
+    
+    // Calculate derived values for get_integ_group_size
+    int max_homo = 0;
+    for (int i = 0; i < homo_size; i++) {
+        if (homo[i] > max_homo) max_homo = homo[i];
+    }
+    int sum_homo_virtual = 0;
+    for (int i = 0; i < homo_size; i++) {
+        sum_homo_virtual += homo[i] * virtual[i];
+    }
+    int product_homo = 1;
+    for (int i = 0; i < homo_size; i++) {
+        product_homo *= homo[i];
+    }
+    
+    bool calc_group_size = true;
+    
+    c_mp2_ri_get_integ_group_size(
+        &integ_group_size, &ngroup_out, &num_integ_group,
+        ngroup, 0, 0,
+        mp2_memory, 0,
+        homo, homo_size, virtual, virtual_size,
+        dimen_RI, calc_forces, unit_nr,
+        gd_array_sizes, gd_array_sizes_size,
+        gd_B_virtual_sizes, gd_B_virtual_sizes_size,
+        maxsize_gd_array, maxsize_gd_B_virtual,
+        maxval_gd_B_virtual, maxval_virtual,
+        max_homo, sum_homo_virtual, product_homo,
+        nspins, calc_group_size,
+        para_env_comm
+    );
+
+    int comm_exchange_out = 0;
+    int comm_rep_out = 0;
+    int* new_sizes_array = NULL;
+    int* ranges_info_array = NULL;
+    int* integ_group_pos2color_sub = NULL;
+    int* sizes_array_orig = NULL;
+    int my_group_L_size_orig = 0;
+    int my_new_group_L_size = 0;
+    
+    // ranges_info_array dimensions: (4 x rep_size x exchange_size)
+    int comm_rep_size = para_env_size / integ_group_size;
+    int comm_exchange_size = integ_group_size;
+    int ranges_info_dim1 = 4;
+    int ranges_info_dim2 = comm_rep_size;
+    int ranges_info_dim3 = comm_exchange_size;
+
+    ranges_info_array = (int*)calloc(4 * comm_rep_size * comm_exchange_size, sizeof(int));
+    integ_group_pos2color_sub = (int*)calloc(comm_exchange_size, sizeof(int));
+    if (calc_forces) {
+        sizes_array_orig = (int*)malloc(gd_array_sizes_size * sizeof(int));
+    }
+    
+    c_mp2_ri_create_group(
+        &comm_exchange_out, &comm_rep_out,
+        (int*)gd_array_sizes, gd_array_sizes_size,
+        ranges_info_array, ranges_info_dim1, ranges_info_dim2, ranges_info_dim3,
+        integ_group_pos2color_sub, comm_exchange_size,
+        sizes_array_orig, (calc_forces) ? gd_array_sizes_size : 0,
+        &my_group_L_size, &my_group_L_size_orig, &my_new_group_L_size,
+        my_group_L_start, my_group_L_end,
+        0, 0,  // Fortran communicator handles
+        color_sub, integ_group_size, num_integ_group,
+        calc_forces, my_group_L_size, my_group_L_size_orig
+    );
+    double my_Emp2_Cou = 0.0;
+    double my_Emp2_EX = 0.0;
+    double my_Emp2_S = 0.0;
+    double my_Emp2_T = 0.0;
+    
+    for (int jspin = 1; jspin < nspins; jspin++) {
+        int j = jspin - 1;
+        int current_L_size = BIb_C_dims[3*j + 0];
+        int current_virtual = BIb_C_dims[3*j + 1];
+        int current_occupied = BIb_C_dims[3*j + 2];
+        
+        c_replicate_iaK_2intgroup(
+            &BIb_C[j], &current_L_size, &current_virtual, &current_occupied,
+            comm_exchange_out, comm_rep_out,
+            homo[j], gd_array_sizes, gd_array_sizes_size,
+            my_B_size[j], my_group_L_size,
+            ranges_info_array, 4, comm_rep_size, comm_exchange_size
+        );
+        
+        for (int ispin = 1; ispin < jspin; ispin++) {
+            int i = ispin - 1;
+            
+            // Determine spin cases
+            bool my_open_shell_ss = (nspins == 2) && (ispin == jspin);
+            bool my_alpha_beta_case = (ispin != jspin);
+            bool my_beta_beta_case = my_open_shell_ss && (ispin == 2);
+            
+            double amp_fac = scale_S + scale_T;
+            if (my_alpha_beta_case || my_open_shell_ss) {
+                amp_fac = scale_T;
+            }
+            
+            // Allocate local arrays (no block) 
+            double* local_ab = NULL;
+            double* t_ab = NULL;
+            double* local_ba = NULL;
+
+            double* P_ij = NULL;
+            double* P_ab = NULL;
+            double* Gamma_P_ia = NULL;
+            bool P_ij_allocated = false;
+            bool P_ab_allocated = false;
+            bool Gamma_P_ia_allocated = false;
+            
+            c_mp2_ri_allocate_no_blk(
+                &local_ab, &t_ab, &local_ba,
+                homo, virtual, my_B_size,
+                my_group_L_size,
+                calc_forces, ispin, jspin,
+                &P_ij, &P_ab, &Gamma_P_ia,
+                &P_ij_allocated, &P_ab_allocated, &Gamma_P_ia_allocated
+            );
+            
+            // Get block size and allocate buffer
+            int block_size = 0;
+            int ngroup_out2 = 0;
+            double* buffer_1D = NULL;
+            
+            // Pass only the needed spin-specific arrays
+            int spin_homo[1] = {homo[i]};
+            int spin_virtual[1] = {virtual[i]};
+            
+            c_mp2_ri_get_block_size(
+                &block_size, &ngroup_out2, &buffer_1D,
+                0.0, user_block_size,
+                para_env_comm, para_env_sub_comm,
+                gd_array_sizes, gd_array_sizes_size, maxsize_gd_array,
+                gd_B_virtual_sizes, gd_B_virtual_sizes_size,
+                maxsize_gd_B_virtual, maxval_gd_B_virtual,
+                spin_homo, 1,
+                spin_virtual, 1, maxval_virtual,
+                dimen_RI, unit_nr,
+                num_integ_group,
+                my_open_shell_ss, calc_forces
+            );
+            
+            // Communication pattern
+            int total_ij_pairs = 0;
+            int* ij_map = NULL;
+            int my_ij_pairs = 0;
+            
+            c_mp2_ri_communication(
+                my_alpha_beta_case,
+                homo[i], homo[j],
+                block_size,
+                ngroup,
+                color_sub,
+                my_open_shell_ss,
+                unit_nr,
+                &total_ij_pairs,
+                &ij_map,
+                &my_ij_pairs
+            );
+            
+            // Gather my_ij_pairs from all processes in exchange communicator
+            int* num_ij_pairs = (int*)malloc(comm_exchange_size * sizeof(int));
+
+            // OVERWELMED, GO TO REST
+            /**
+             * void cp_mpi_allgather_int(const int *sendbuf, const int sendcount, int *recvbuf,
+                          const int recvcount, const cp_mpi_comm_t comm);
+             */
+            // I do not know if use para_env_comm or para_env_comm_sub
+            cp_mpi_allgather_int(my_ij_pairs, 1, num_ij_pairs,
+                          1, para_env_comm);
+            
+            int max_ij_pairs = my_ij_pairs;
+            for (int p = 0; p < comm_exchange_size; p++) {
+                if (num_ij_pairs[p] > max_ij_pairs) {
+                    max_ij_pairs = num_ij_pairs[p];
+                }
+            }
+            
+            // Allocate block arrays
+            double* local_i_aL = NULL;
+            double* local_j_aL = NULL;
+            double* Y_i_aP = NULL;
+            double* Y_j_aP = NULL;
+            
+            c_mp2_ri_allocate_blk(
+                dimen_RI, my_B_size, block_size,
+                ispin, jspin,
+                &local_i_aL, &local_j_aL,
+                &Y_i_aP, &Y_j_aP
+            );
+            
+            // Loop over ij pairs (the main computational loop)
+            // Handle 2
+            offload_timeset("mp2_ri_gpw_compute_en_RI_loop\0");
+
+            // Handle2
+            offload_timestop();
+
+            free(local_ab);
+            if (t_ab) free(t_ab);
+            if (local_ba) free(local_ba);
+            free(buffer_1D);
+            free(ij_map);
+            free(num_ij_pairs);
+            free(local_i_aL);
+            free(local_j_aL);
+            if (Y_i_aP) free(Y_i_aP);
+            if (Y_j_aP) free(Y_j_aP);
+        }
+    }
+    free(virtual);
+    free(my_B_size);
+    free(my_B_virtual_start);
+    free(my_B_virtual_end);
+    free(ranges_info_array);
+    free(integ_group_pos2color_sub);
+    if (sizes_array_orig) free(sizes_array_orig);
+    
+    // Return energies
+    /*
+    cp_mpi_sum_double(my_Emp2_Cou, const int count,
+                       const cp_mpi_comm_t comm);
+    */
+    *Emp2_Cou = my_Emp2_Cou; //Emp2_Cou + my_Emp2_Cou;
+    *Emp2_EX = my_Emp2_EX; // Emp2_EX + my_Emp2_EX;
+    *Emp2_S = my_Emp2_S;
+    *Emp2_T = my_Emp2_T;
+
+    /**
+     * ! ============ REPLACE WITH cp_mpi_comm_free
+      CALL comm_exchange%free()
+      CALL comm_rep%free()
+     */
+
+    // Timer stop
+    offload_timestop();
+
+
+    /**
+     * !================= REVIEW LATER
+      ! release memory allocated by local_gemm when run on GPU. local_gemm_ctx is null on cpu only runs
+      CALL mp2_env%local_gemm_ctx%destroy()
+      CALL timestop(handle)
+     */
 }
