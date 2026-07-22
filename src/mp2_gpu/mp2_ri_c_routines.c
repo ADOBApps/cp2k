@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "../mpiwrap/cp_mpi.h"
+#include "gemm_c_api.h"
 
 // I use it like a timer
 #include "../offload/offload_library.h"
@@ -1299,6 +1300,107 @@ void c_mp2_ri_allocate_blk(
     offload_timestop();
 }
 
+
+/**
+ *  
+ * __________________________________________________________________________________________________
+ * |                  FORTRAN-SIDE                    ||               C-SIDE                        |
+ * |__________________________________________________||_____________________________________________|
+ * |   (VAR TYPE)  |(INTENT) |       (VAR NAME)       ||    (VAR TYPE)      |      (VAR NAME)        |
+ * |_______________|_________|________________________||____________________|________________________|
+ * |REAL DIM(:,:,:)|  (OUT)  |        local_i_aL      ||      double*       |      local_i_aL        |
+ * |               |         |   local_i_aL_L_size    ||      int           |   local_i_aL_L_size    |
+ * |               |         |   local_i_aL_virtual   ||      int           |   local_i_aL_virtual   |
+ * |               |         |    local_i_aL_block    ||      int           |   local_i_aL_block     |
+ * |_______________|_________|________________________||____________________|________________________|
+ * |_______________|_________|________________________||____________________|________________________|
+ * |   (INTEGER)   |         |                        ||                    |                        |
+ * |DIMENSION(:, :)|  (IN)   |  ranges_info_array     ||     const int*     |   ranges_info_array    |
+ * |               |         | ranges_info_rep_size   ||      int           | ranges_info_rep_size   |
+ * |_______________|_________|________________________||____________________|________________________|
+ * |   (INTEGER)   |  (IN)   |        BIb_C_rec       ||   const double*    |        BIb_C_rec       |
+ * |               |         |   BIb_C_rec_L_size     ||      int           |   BIb_C_rec_L_size     |
+ * |               |         |   BIb_C_rec_virtual    ||      int           |   BIb_C_rec_virtual    |
+ * |               |         |    BIb_C_rec_block     ||      int           |   BIb_C_rec_block      |
+ * |_______________|_________|________________________||____________________|________________________|
+ * 
+ * double* local_i_aL           // Flattened 3D array local_i_aL[L][virtual][block]
+ * int local_i_aL_L_size        // L-size
+ * int local_i_aL_virtual       // virtual dimension
+ * int local_i_aL_block         // block size
+ * 
+ * const int* ranges_info_array // 4*size_rep (flattened)
+ * int ranges_info_rep_size     //  number of replication groups
+ * 
+ * const double* BIb_C_rec      // Flattened 3D array BIb_C_rec[L][virtual][block]
+ * int BIb_C_rec_L_size
+ * int BIb_C_rec_virtual
+ * int BIb_C_rec_block
+ *
+ */
+void fill_local_i_aL(
+    double* local_i_aL, int local_i_aL_L_size, int local_i_aL_virtual,
+    int local_i_aL_block, const int* ranges_info_array, int ranges_info_rep_size,
+    const double* BIb_C_rec, int BIb_C_rec_L_size, int BIb_C_rec_virtual,
+    int BIb_C_rec_block
+){
+    // start timer
+    offload_timeset("fill_local_i_aL\0");
+
+    for(int irep = 0; irep < ranges_info_rep_size; irep++) {
+        /**
+         * Fortran: (dim1, dim2m2, dim3) (colum-major)
+         * 
+         * C: [dim3][dim2][dim1] (row-major) 
+         * flattenf like [block_size][my_B_size(ispin)][dimen_RI]
+         * 
+         * to access: arr[i * ranges_info_rep_size + irep]
+         */
+        int Lstart_pos = ranges_info_array[0 * ranges_info_rep_size + irep];
+        int Lend_pos = ranges_info_array[1 * ranges_info_rep_size + irep];
+        int start_point = ranges_info_array[2 * ranges_info_rep_size + irep];
+        int end_point = ranges_info_array[3 * ranges_info_rep_size + irep];
+
+        // Number of L-index copy
+        // start_point:end_point
+        int L_size = end_point - start_point;
+
+        /**
+         * Copy data from BIb_c to local_i_aL
+         * Fortran-side: local_i_aL(L, v_pos, i_block)
+         * C-side: [(i_block * virtual + v_pos) * L_size + (L - 1)]
+         * C-side: [(i_block * virtual * L_size) + (v_pos * L_size) + (L - 1)]
+         * 
+         * i_block: is the page
+         * virtual: is the row
+         * v_pos:   is the position in virtual block
+         * L:       is the colum
+         * (L - 1): is the position in L block
+         * 
+         * Index = block_offset + virtual offset + l_offset
+         * Index = (i_block * virtual * L_size) + (v_pos * L_size) + (L - 1)
+         */
+         for (int i_block = 0; i_block < local_i_aL_block; i_block++) {
+            for (int v_pos = 0; v_pos < local_i_aL_virtual; v_pos++) {
+
+                // Origin
+                // BIb_C_rec[(i_block * BIb_C_rec_virtual + v_pos) * BIb_C_rec_L_size + (start_point - 1)]
+                size_t src_idx = ((size_t)i_block * BIb_C_rec_virtual + v_pos) * local_i_aL_L_size + (start_point - 1);
+
+                // Destination
+                // local_i_aL[(i_block * local_i_aL_virtual + v_pos) * BIb_C_rec_L_size + (Lstart_pos - 1)]
+                size_t dest_idx = ((size_t)i_block * local_i_aL_virtual + v_pos) * BIb_C_rec_L_size + (Lstart_pos - 1);
+
+                // void *memcpy(void *dest, const void *src, size_t count);
+                memcpy(&local_i_aL[dest_idx], &BIb_C_rec[src_idx], L_size * sizeof(double));
+            }
+         }
+    }
+
+    // Stop timer
+    offload_timestop();
+}
+
 /**
  * 
 ____________________________________________________________________________________________________________
@@ -1463,6 +1565,9 @@ void mp2_ri_gpw_compute_en(
     int integ_group_size = 0;
     int ngroup_out = 0;
     int num_integ_group = 0;
+
+    // Call gemm_c_apu
+    gemm_ctx_t *ctx = gemm_ctx_create(GEMM_PU_HOST, GEMM_LIB_BLAS);
     
     // Calculate derived values for get_integ_group_size
     int max_homo = 0;
@@ -1525,7 +1630,7 @@ void mp2_ri_gpw_compute_en(
         sizes_array_orig, (calc_forces) ? gd_array_sizes_size : 0,
         &my_group_L_size, &my_group_L_size_orig, &my_new_group_L_size,
         my_group_L_start, my_group_L_end,
-        0, 0,  // Fortran communicator handles
+        0, 0,
         color_sub, integ_group_size, num_integ_group,
         calc_forces, my_group_L_size, my_group_L_size_orig
     );
@@ -1626,12 +1731,7 @@ void mp2_ri_gpw_compute_en(
             // Gather my_ij_pairs from all processes in exchange communicator
             int* num_ij_pairs = (int*)malloc(comm_exchange_size * sizeof(int));
 
-            // OVERWELMED, GO TO REST
-            /**
-             * void cp_mpi_allgather_int(const int *sendbuf, const int sendcount, int *recvbuf,
-                          const int recvcount, const cp_mpi_comm_t comm);
-             */
-            // I do not know if use para_env_comm or para_env_comm_sub
+            //======================== Current point
             cp_mpi_allgather_int(my_ij_pairs, 1, num_ij_pairs,
                           1, para_env_comm);
             
@@ -1686,6 +1786,8 @@ void mp2_ri_gpw_compute_en(
     /*
     cp_mpi_sum_double(my_Emp2_Cou, const int count,
                        const cp_mpi_comm_t comm);
+           
+    * cp_mpi_comm para_env_comm
     */
     *Emp2_Cou = my_Emp2_Cou; //Emp2_Cou + my_Emp2_Cou;
     *Emp2_EX = my_Emp2_EX; // Emp2_EX + my_Emp2_EX;
@@ -1703,7 +1805,7 @@ void mp2_ri_gpw_compute_en(
 
 
     /**
-     * !================= REVIEW LATER
+     * !================= USE gemm_c_api
       ! release memory allocated by local_gemm when run on GPU. local_gemm_ctx is null on cpu only runs
       CALL mp2_env%local_gemm_ctx%destroy()
       CALL timestop(handle)

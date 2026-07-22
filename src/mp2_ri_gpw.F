@@ -253,6 +253,7 @@ CONTAINS
             CALL timeset(routineN//"_RI_loop", handle2)
             my_Emp2_Cou = 0.0_dp
             my_Emp2_EX = 0.0_dp
+            ! === IGNIRE IT
             t_start = m_walltime()
             DO ij_index = 1, max_ij_pairs
 
@@ -268,6 +269,7 @@ CONTAINS
                   END IF
                END IF
 
+               ! === IGNIRE IT
                IF (calc_forces) THEN
                   Y_i_aP = 0.0_dp
                   Y_j_aP = 0.0_dp
@@ -390,7 +392,7 @@ CONTAINS
                               CALL para_env_sub%sendrecv(my_local_i_aL, proc_send, &
                                                          external_i_aL, proc_receive, tag)
 
-                              ! PENDING TO CHECK
+                              ! === USE gemm_ctx_dgemm
                               CALL mp2_env%local_gemm_ctx%gemm( &
                                  'T', 'N', rec_B_size, my_B_size(jspin), dimen_RI, 1.0_dp, &
                                  external_i_aL, dimen_RI, my_local_j_aL, dimen_RI, &
@@ -729,6 +731,7 @@ CONTAINS
 
       !================= REVIEW LATER
       ! release memory allocated by local_gemm when run on GPU. local_gemm_ctx is null on cpu only runs
+      ! gemm_c_api.h
       CALL mp2_env%local_gemm_ctx%destroy()
       CALL timestop(handle)
 
@@ -758,6 +761,7 @@ CONTAINS
          start_point = ranges_info_array(3, irep)
          end_point = ranges_info_array(4, irep)
 
+         ! === IGNORE THIS TIME OpenMP parallel
 !$OMP PARALLEL WORKSHARE DEFAULT(NONE) &
 !$OMP          SHARED(BIb_C_rec,local_i_aL,Lstart_pos,Lend_pos,start_point,end_point)
          local_i_aL(Lstart_pos:Lend_pos, :, :) = BIb_C_rec(start_point:end_point, :, :)
