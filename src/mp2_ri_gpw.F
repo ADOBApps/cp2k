@@ -357,6 +357,7 @@ CONTAINS
                   ! loop over the block elements
                   DO iiB = 1, my_block_size
                      DO jjB = 1, my_block_size
+                        ! ====== EXPASION BLOCK
                         CALL timeset(routineN//"_expansion", handle3)
                         ASSOCIATE (my_local_i_aL => local_i_aL(:, :, iiB), my_local_j_aL => local_j_aL(:, :, jjB))
 
@@ -366,7 +367,9 @@ CONTAINS
                            IF ((my_alpha_beta_case) .AND. (calc_forces)) THEN
                               local_ba = 0.0_dp
                            END IF
+                           ! ========= I CAN IGNORITE IT
                            CALL dgemm_counter_start(dgemm_counter)
+
                            CALL mp2_env%local_gemm_ctx%gemm('T', 'N', my_B_size(ispin), my_B_size(jspin), dimen_RI, 1.0_dp, &
                                                             my_local_i_aL, dimen_RI, my_local_j_aL, dimen_RI, &
                                                            0.0_dp, local_ab(my_B_virtual_start(ispin):my_B_virtual_end(ispin), :), &
@@ -386,6 +389,7 @@ CONTAINS
                               CALL get_group_dist(gd_B_virtual(ispin), proc_receive, rec_B_virtual_start, &
                                                   rec_B_virtual_end, rec_B_size)
 
+                              ! ======= CHECK THIS PART BE CAREFULL
                               external_i_aL(1:dimen_RI, 1:rec_B_size) => buffer_1D(1:INT(dimen_RI, int_8)*rec_B_size)
                               external_i_aL = 0.0_dp
 
@@ -427,6 +431,7 @@ CONTAINS
                            END IF
                            CALL timestop(handle3)
 
+                           ! I CAN IGNORE IT
                            !sample peak memory
                            CALL m_memory()
 

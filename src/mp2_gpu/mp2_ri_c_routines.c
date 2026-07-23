@@ -1380,6 +1380,7 @@ void fill_local_i_aL(
          * Index = block_offset + virtual offset + l_offset
          * Index = (i_block * virtual * L_size) + (v_pos * L_size) + (L - 1)
          */
+        // local_i_aL(Lstart_pos:Lend_pos, :) = BIb_C_rec(start_point:end_point, :)
          for (int i_block = 0; i_block < local_i_aL_block; i_block++) {
             for (int v_pos = 0; v_pos < local_i_aL_virtual; v_pos++) {
 
@@ -1403,23 +1404,6 @@ void fill_local_i_aL(
 
 /**
  * 
-____________________________________________________________________________________________________________
-|    Fortran     |            C (IN)            |             C (OUT)             |       C (INOUT)        |
-|________________|______________________________|_________________________________|________________________|
-| `INTEGER`      |            `int`             |             `int*`              |         `int*`         |
-|________________|______________________________|_________________________________|________________________|
-| `REAL`         |             `double`         |          `double*`              |        `double*`       |
-|________________|______________________________|_________________________________|________________________|
-| `LOGICAL`      |            `bool`            |             `bool*`             |        `bool*`         |
-|________________|______________________________|_________________________________|________________________|
-| `INTEGER(:)`   | `const int*` + `int size`    |      `int*` + `int size`        |  `int*` + `int size`   |
-|________________|______________________________|_________________________________|________________________|
-| `REAL(:)`      | `const double*` + `int size` | `double**` (alloc) or `double*` | `double*` + `int size` |
-|________________|______________________________|_________________________________|________________________|
-| `TYPE`         |        Flatten to fields     |               N/A               |    N/A                 |
-|________________|______________________________|_________________________________|________________________|
-| `mp_comm_type` |         `cp_mpi_comm_t`      |         `cp_mpi_comm_t*`        |     `cp_mpi_comm_t*`   |
-|________________|______________________________|_________________________________|________________________|
  * ______________________________________________________________________________________________
  * |                  FORTRAN-SIDE                ||                  C-SIDE                    |
  * |______________________________________________||____________________________________________|
@@ -1554,8 +1538,12 @@ void mp2_ri_gpw_compute_en(
     int* my_B_size = (int*)malloc(nspins * sizeof(int));
     int* my_B_virtual_start = (int*)malloc(nspins * sizeof(int));
     int* my_B_virtual_end = (int*)malloc(nspins * sizeof(int));
+
+    int* gd_B_virtual_start = (int*)malloc(gd_B_virtual_sizes_size * sizeof(int));
+    int* gd_B_virtual_end = (int*)malloc(gd_B_virtual_sizes_size * sizeof(int));
     
     int para_env_size = cp_mpi_comm_size(para_env_comm);
+    int para_env_sub_rank = cp_mpi_comm_rank(para_env_sub_comm);
     int para_env_sub_size = cp_mpi_comm_size(para_env_sub_comm);
     int ngroup = para_env_size / para_env_sub_size;
     int my_group_L_start = 1;
@@ -1618,9 +1606,6 @@ void mp2_ri_gpw_compute_en(
 
     ranges_info_array = (int*)calloc(4 * comm_rep_size * comm_exchange_size, sizeof(int));
     integ_group_pos2color_sub = (int*)calloc(comm_exchange_size, sizeof(int));
-    if (calc_forces) {
-        sizes_array_orig = (int*)malloc(gd_array_sizes_size * sizeof(int));
-    }
     
     c_mp2_ri_create_group(
         &comm_exchange_out, &comm_rep_out,
@@ -1634,6 +1619,13 @@ void mp2_ri_gpw_compute_en(
         color_sub, integ_group_size, num_integ_group,
         calc_forces, my_group_L_size, my_group_L_size_orig
     );
+
+    cp_mpi_comm_t comm_exchange_c = cp_mpi_comm_f2c(comm_exchange_out);
+    int tag = 42;
+
+    int comm_exchange_rank = 0;
+    int comm_exchange_size_real = comm_exchange_size_real;
+
     double my_Emp2_Cou = 0.0;
     double my_Emp2_EX = 0.0;
     double my_Emp2_S = 0.0;
@@ -1759,6 +1751,315 @@ void mp2_ri_gpw_compute_en(
             // Handle 2
             offload_timeset("mp2_ri_gpw_compute_en_RI_loop\0");
 
+            for (int ij_index = 1; ij_index < max_ij_pairs; ij_index++) {
+
+                if (ij_index <= my_ij_pairs) {
+                    // Get i, j, and block_size for this pair
+                    int ij_counter = (ij_index - (color_sub > 0 ? 1 : 0)) * ngroup + color_sub;
+                    // In real code: get from ij_map
+                    int my_i = ij_map[0 * total_ij_pairs + ij_counter - 1];
+                    int my_j = ij_map[1 * total_ij_pairs + ij_counter - 1];
+                    int my_block_size = ij_map[2 * total_ij_pairs + ij_counter - 1];
+
+                    // fill local_i_aL and local_j_aL
+                    // call fill_local_i_aL
+
+                    int local_i_aL_L_size = dimen_RI;       // First dimension: Ri basis
+                    int local_i_aL_virtual = my_B_size[i];  // secodnd: virtual
+                    int local_i_aL_block = my_block_size;   // Third: block size
+
+                    int L_size = gd_array_sizes[comm_exchange_rank];
+                    int BIb_C_rec_i_virtual = my_B_size[i]; // secodnd: virtual
+                    int BIb_C_rec_i_block = my_block_size;  // Third: block size
+
+                    // const int* ranges_info_array;
+                    int ranges_info_rep_size = comm_rep_size;
+
+                    fill_local_i_aL(
+                        local_i_aL, local_i_aL_L_size, local_i_aL_virtual,
+                        local_i_aL_block, ranges_info_array, ranges_info_rep_size,
+                        BIb_C[i], L_size, BIb_C_rec_i_virtual,
+                        BIb_C_rec_i_block
+                    );
+
+                    int local_j_aL_L_size = dimen_RI;       // First dimension: Ri basis
+                    int local_j_aL_virtual = my_B_size[j];  // secodnd: virtual
+                    int local_j_aL_block = my_block_size;   // Third: block size
+
+                    int BIb_C_rec_j_virtual = my_B_size[j];  // secodnd: virtual
+                    int BIb_C_rec_j_block = my_block_size;   // Third: block size
+
+                    fill_local_i_aL(
+                        local_j_aL, local_j_aL_L_size, local_j_aL_virtual,
+                        local_j_aL_block, ranges_info_array, ranges_info_rep_size,
+                        BIb_C[j], L_size, BIb_C_rec_j_virtual,
+                        BIb_C_rec_j_block
+                    );
+
+                    // Handle 3
+                    offload_timeset("mp2_ri_gpw_compute_en_RI_comm\0");
+                    for (int proc_shift = 1; proc_shift < comm_exchange_size; proc_shift++) {
+                        // Calculate send and receive process ranks
+                        int proc_send = (comm_exchange_rank + proc_shift) % comm_exchange_size;
+                        int proc_receive = (comm_exchange_rank - proc_shift + comm_exchange_size) % comm_exchange_size;
+
+                        //Get the number ij pairs for the sending process
+                        int send_ij_index = num_ij_pairs[proc_send];
+
+                        // Get the L-size for the receiving process (rec_L_sizes)
+                        int rec_L_size = gd_array_sizes[proc_receive];
+
+                        if (ij_index <= send_ij_index) {
+                            // Calculate send indices for this ij pair
+                            int ij_counter_send = (ij_index - 1) * ngroup + integ_group_pos2color_sub[proc_send];
+                            int send_i = ij_map[0 * total_ij_pairs + ij_counter_send - 1];
+                            int send_j = ij_map[1 * total_ij_pairs + ij_counter_send - 1];
+                            
+                            // Occupied i: send and receive data
+                            // Fortran BI_C_rec(1:rec_L_size, 1:my_B_size(ispin), 1:my_block_size)
+                            // C: Flattened as [block][virtual][L]
+                            // index: (i_block * virtual + a) * rec_L_size + (L - 1)
+
+                            size_t rec_size_i = (size_t)rec_L_size * my_B_size[i] * my_block_size;
+                            double* BI_C_rec_i = buffer_1D;
+                            // BI_C_rec = 0.0_dp memset can work?
+                            memset(BI_C_rec_i, 0, rec_L_size * sizeof(double));
+
+                            // CALL comm_exchange%sendrecv(BIb_C(ispin)%array(:, :, send_i:send_i + my_block_size - 1), &
+                            //                        proc_send, BI_C_rec, proc_receive, tag)
+                            size_t send_size_i = (size_t)my_group_L_size * my_B_size[i] * my_block_size;
+                            // size_t offser_i = ((size_t)(send_i - 1) * my_B_size[i]);
+                            double* send_buffer_i = &BIb_C[i][((size_t)(send_i - 1) * my_B_size[i]) * my_group_L_size];
+
+                            cp_mpi_sendrecv_double(
+                                send_buffer_i,
+                                (int)send_size_i,
+                                proc_send,
+                                tag,
+                                BI_C_rec_i,
+                                (int)rec_size_i,
+                                proc_receive,
+                                tag,
+                                comm_exchange_c
+                            );
+
+                            fill_local_i_aL(
+                                local_i_aL,                    // Destination
+                                dimen_RI,                      // local_i_aL_L_size
+                                my_B_size[i],                  // local_i_aL_virtual
+                                my_block_size,                 // local_i_aL_block
+                                ranges_info_array,             // ranges_info_array
+                                comm_rep_size,                 // ranges_info_rep_size
+                                BI_C_rec_i,                    // Source: BIb_C_rec
+                                rec_L_size,                    // BIb_C_rec_L_size
+                                my_B_size[i],                  // BIb_C_rec_virtual
+                                my_block_size                  // BIb_C_rec_block
+                            );
+
+                            // Occupied j: send and receive data
+                            size_t rec_size_j = (size_t)rec_L_size * my_B_size[j] * my_block_size;
+                            double* BI_C_rec_j = buffer_1D + rec_size_i; // Start of receive vuffer for j
+                            // BI_C_rec = 0.0_dp memset can work?
+                            memset(BI_C_rec_j, 0, rec_size_j * sizeof(double));
+
+                            // CALL comm_exchange%sendrecv(BIb_C(ispin)%array(:, :, send_i:send_i + my_block_size - 1), &
+                            //                        proc_send, BI_C_rec, proc_receive, tag)
+                            size_t send_size_j = (size_t)my_group_L_size * my_B_size[j] * my_block_size;
+                            // size_t offser_j = ((size_t)(send_j - 1) * my_B_size[j]);
+                            double* send_buffer_j = &BIb_C[j][((size_t)(send_j - 1) * my_B_size[j]) * my_group_L_size];
+
+                            cp_mpi_sendrecv_double(
+                                send_buffer_j,
+                                (int)send_size_j,
+                                proc_send,
+                                tag,
+                                BI_C_rec_j,
+                                (int)rec_size_j,
+                                proc_receive,
+                                tag,
+                                comm_exchange_c
+                            );
+
+                            fill_local_i_aL(
+                                local_j_aL,                    // Destination
+                                dimen_RI,                      // local_i_aL_L_size
+                                my_B_size[j],                  // local_i_aL_virtual
+                                my_block_size,                 // local_i_aL_block
+                                ranges_info_array,             // ranges_info_array
+                                comm_rep_size,                 // ranges_info_rep_size
+                                BI_C_rec_j,                    // Source: BIb_C_rec
+                                rec_L_size,                    // BIb_C_rec_L_size
+                                my_B_size[j],                  // BIb_C_rec_virtual
+                                my_block_size                  // BIb_C_rec_block
+                            );
+                        }
+                        else {
+                            // No work to do - we only receive data
+                            // OCCUPIED i: Receive data only
+
+                            size_t rec_size_i = (size_t)rec_L_size * my_B_size[i] * my_block_size;
+                            double* BI_C_rec_i = buffer_1D;
+                            memset(BI_C_rec_i, 0, rec_size_i * sizeof(double));
+                            
+
+                            // cp_mpi_sendrecv_double requires a send buffer
+                            // Even when we have nothing to send, we still need to call it
+                            // with a valid send buffer (can be dummy)
+
+                            double dummy_send = 0.0;
+                            
+                            // Send: dummy_send to proc_send (not actually used)
+                            // Receive: BI_C_rec_i from proc_receive
+                            cp_mpi_sendrecv_double(
+                                &dummy_send,                // Dummy send buffer
+                                0,                          // Send count = 0 (nothing to send)
+                                proc_send,                  // Destination
+                                tag,                        // Send tag
+                                BI_C_rec_i,                 // Receive buffer
+                                (int)rec_size_i,            // Receive count
+                                proc_receive,               // Source
+                                tag,                        // Receive tag
+                                comm_exchange_c             // Communicator
+                            );
+                            
+                            // Fill local_i_aL with received data
+                            // local_i_aL(:, :, 1:my_block_size) = BI_C_rec_i(:, 1:my_B_size(ispin), 1:my_block_size)
+                            fill_local_i_aL(
+                                local_i_aL,                    // Destination
+                                dimen_RI,                      // local_i_aL_L_size
+                                my_B_size[i],                  // local_i_aL_virtual
+                                my_block_size,                 // local_i_aL_block
+                                ranges_info_array,             // ranges_info_array
+                                comm_rep_size,                 // ranges_info_rep_size
+                                BI_C_rec_i,                    // Source: BIb_C_rec
+                                rec_L_size,                    // BIb_C_rec_L_size
+                                my_B_size[i],                  // BIb_C_rec_virtual
+                                my_block_size                  // BIb_C_rec_block
+                            );
+                            
+                            // OCCUPIED j: Receive data only
+                            size_t rec_size_j = (size_t)rec_L_size * my_B_size[j] * my_block_size;
+                            double* BI_C_rec_j = buffer_1D + rec_size_i;
+                            memset(BI_C_rec_j, 0, rec_size_j * sizeof(double));
+                            
+                            // Send: dummy_send to proc_send (not actually used)
+                            // Receive: BI_C_rec_j from proc_receive
+                            cp_mpi_sendrecv_double(
+                                &dummy_send,                // Dummy send buffer
+                                0,                          // Send count = 0 (nothing to send)
+                                proc_send,                  // Destination
+                                tag,                        // Send tag
+                                BI_C_rec_j,                 // Receive buffer
+                                (int)rec_size_j,            // Receive count
+                                proc_receive,               // Source
+                                tag,                        // Receive tag
+                                comm_exchange_c             // Communicator
+                            );
+                            
+                            // Fill local_j_aL with received data
+                            // local_j_aL(:, :, 1:my_block_size) = BI_C_rec_j(:, 1:my_B_size(jspin), 1:my_block_size)
+                            fill_local_i_aL(
+                                local_j_aL,                    // Destination
+                                dimen_RI,                      // local_j_aL_L_size
+                                my_B_size[j],                  // local_j_aL_virtual
+                                my_block_size,                 // local_j_aL_block
+                                ranges_info_array,             // ranges_info_array
+                                comm_rep_size,                 // ranges_info_rep_size
+                                BI_C_rec_j,                    // Source: BIb_C_rec
+                                rec_L_size,                    // BIb_C_rec_L_size
+                                my_B_size[j],                  // BIb_C_rec_virtual
+                                my_block_size                  // BIb_C_rec_block
+                            );
+                        }
+                    }
+                    // Handle 3
+                    offload_timestop();
+
+                    // loop over the block elements
+                    for (int iiB = 1; iiB < my_block_size; iiB++) {
+                        for (int jjB = 1; jjB < my_block_size; jjB++) {
+                            // ====== EXPASION BLOCK
+                            offload_timeset("mp2_ri_gpw_compute_en_RI_expasion\0");
+                            memset(local_ab, 0, (size_t)my_B_size[i] * my_B_size[i] * sizeof(double));
+                            // Use pointer to replace ASSOCIATE block
+                            double* my_local_i_aL = &local_i_aL[(size_t)(iiB - 1) * my_B_size[i] * dimen_RI];
+                            double* my_local_j_aL = &local_j_aL[(size_t)(jjB - 1) * my_B_size[j] * dimen_RI];
+
+                            // DGEMM: local_ab = my_local_i_aL^T * my_local_j_aL
+                            // A: my_local_i_aL (dimen_RI x my_B_size[i])
+                            // B: my_local_j_aL (dimen_RI x my_B_size[j])
+                            // Result: local_ab (my_B_size[i] x my_B_size[j])
+                            gemm_ctx_dgemm(
+                                ctx, 'T', 'N',
+                                my_B_size[i], my_B_size[j], dimen_RI,
+                                1.0, my_local_i_aL, dimen_RI,
+                                my_local_j_aL, dimen_RI,
+                                0.0, &local_ab[0], my_B_size[i]
+                            );
+
+                            // Collect data from other processes in the subgroup
+                            for (int proc_shift = 1; proc_shift < para_env_sub_size; proc_shift++) {
+                                int proc_send = (para_env_sub_rank + proc_shift) % para_env_sub_size;
+                                int proc_receive = (para_env_sub_rank - proc_shift + para_env_sub_size) % para_env_sub_size;
+                                
+                                // Get virtual ranges for receiving process
+                                int rec_B_virtual_start = gd_B_virtual_start[proc_receive];
+                                int rec_B_virtual_end = gd_B_virtual_end[proc_receive];
+                                int rec_B_size = rec_B_virtual_end - rec_B_virtual_start + 1;
+                                
+                                // Allocate external_i_aL in buffer_1D
+                                size_t ext_size = (size_t)dimen_RI * rec_B_size;
+                                double* external_i_aL = buffer_1D;
+                                memset(external_i_aL, 0, ext_size * sizeof(double));
+                                
+                                // Send my_local_i_aL to proc_send, receive into external_i_aL from proc_receive
+                                cp_mpi_sendrecv_double(
+                                    my_local_i_aL,                      // Send buffer
+                                    (int)(dimen_RI * my_B_size[i]),     // Send count
+                                    proc_send,                          // Destination
+                                    tag,                                // Send tag
+                                    external_i_aL,                      // Receive buffer
+                                    (int)ext_size,                      // Receive count
+                                    proc_receive,                       // Source
+                                    tag,                                // Receive tag
+                                    para_env_sub_comm                 // Communicator
+                                );
+                                
+                                // DGEMM: local_ab += external_i_aL^T * my_local_j_aL
+                                // external_i_aL: (dimen_RI x rec_B_size)
+                                // my_local_j_aL: (dimen_RI x my_B_size[j])
+                                gemm_ctx_dgemm(ctx, 'T', 'N',
+                                                rec_B_size, my_B_size[j], dimen_RI,
+                                                1.0, external_i_aL, dimen_RI,
+                                                my_local_j_aL, dimen_RI,
+                                                1.0, &local_ab[(rec_B_virtual_start - 1) * my_B_size[j]], my_B_size[i]);
+                            }
+
+                            offlad_timeset("mp2_ri_gpw_compute_en_RI_ener\0");
+                            // Calculate Coulomb only MP2
+                            double sym_fac = (my_i == my_j) ? 1.0 : 2.0;
+                            if (my_alpha_beta_case) sym_fac = 0.5;
+
+                            // DO b = 1, my_B_size(jspin)
+                            for (int b = 0; b < my_B_size[j]; b++) {
+                                int b_global = b + my_B_virtual_start[j] - 1;
+
+                                // DO a = 1, virtual(ispin)
+                                for (int a = 0; a < virtual[i]; a++) {
+                                    double integral = local_ab[a * my_B_size[j] + b];
+                                    double divi_part = Eigenval[(homo[i] + a) * nspins + i] + 
+                                        Eigenval[(homo[j] + b_global) * nspins + j] -
+                                        Eigenval[(my_i + iiB - 1) * nspins + i] -
+                                        Eigenval[(my_j + jjB - 1) * nspins + j];
+                                    my_Emp2_Cou -= sym_fac * 2.0 * integral * integral / divi_part;
+                                }
+                            }
+                            offload_timestop();
+                        }
+                    }
+
+                } else {}
+            }
             // Handle2
             offload_timestop();
 
@@ -1789,10 +2090,12 @@ void mp2_ri_gpw_compute_en(
            
     * cp_mpi_comm para_env_comm
     */
-    *Emp2_Cou = my_Emp2_Cou; //Emp2_Cou + my_Emp2_Cou;
-    *Emp2_EX = my_Emp2_EX; // Emp2_EX + my_Emp2_EX;
-    *Emp2_S = my_Emp2_S;
-    *Emp2_T = my_Emp2_T;
+    cp_mpi_sum_double(&my_Emp2_Cou, 1, para_env_comm);
+    cp_mpi_sum_double(&my_Emp2_EX, 1, para_env_comm);
+    *Emp2_Cou += my_Emp2_Cou;
+    *Emp2_EX += my_Emp2_EX; // Emp2_EX + my_Emp2_EX;
+    *Emp2_S += my_Emp2_S;
+    *Emp2_T += my_Emp2_T;
 
     /**
      * ! ============ REPLACE WITH cp_mpi_comm_free
@@ -1800,14 +2103,13 @@ void mp2_ri_gpw_compute_en(
       CALL comm_rep%free()
      */
 
-    // Timer stop
-    offload_timestop();
-
-
     /**
      * !================= USE gemm_c_api
       ! release memory allocated by local_gemm when run on GPU. local_gemm_ctx is null on cpu only runs
       CALL mp2_env%local_gemm_ctx%destroy()
       CALL timestop(handle)
      */
+    gemm_ctx_destroy(ctx);
+    // Timer stop
+    offload_timestop();
 }
