@@ -1764,36 +1764,34 @@ void mp2_ri_gpw_compute_en(
                     // fill local_i_aL and local_j_aL
                     // call fill_local_i_aL
 
-                    int local_i_aL_L_size = dimen_RI;       // First dimension: Ri basis
-                    int local_i_aL_virtual = my_B_size[i];  // secodnd: virtual
-                    int local_i_aL_block = my_block_size;   // Third: block size
-
                     int L_size = gd_array_sizes[comm_exchange_rank];
-                    int BIb_C_rec_i_virtual = my_B_size[i]; // secodnd: virtual
-                    int BIb_C_rec_i_block = my_block_size;  // Third: block size
-
                     // const int* ranges_info_array;
                     int ranges_info_rep_size = comm_rep_size;
 
                     fill_local_i_aL(
-                        local_i_aL, local_i_aL_L_size, local_i_aL_virtual,
-                        local_i_aL_block, ranges_info_array, ranges_info_rep_size,
-                        BIb_C[i], L_size, BIb_C_rec_i_virtual,
-                        BIb_C_rec_i_block
+                        local_i_aL,                    // Destination
+                        dimen_RI,                      // local_i_aL_L_size
+                        my_B_size[i],                  // local_i_aL_virtual
+                        my_block_size,                 // local_i_aL_block
+                        ranges_info_array,             // ranges_info_array
+                        ranges_info_rep_size,
+                        BIb_C[i],                      // Source: BIb_C_rec
+                        L_size,                        // BIb_C_rec_L_size
+                        my_B_size[i],                  // BIb_C_rec_virtual
+                        my_block_size                  // BIb_C_rec_block
                     );
 
-                    int local_j_aL_L_size = dimen_RI;       // First dimension: Ri basis
-                    int local_j_aL_virtual = my_B_size[j];  // secodnd: virtual
-                    int local_j_aL_block = my_block_size;   // Third: block size
-
-                    int BIb_C_rec_j_virtual = my_B_size[j];  // secodnd: virtual
-                    int BIb_C_rec_j_block = my_block_size;   // Third: block size
-
                     fill_local_i_aL(
-                        local_j_aL, local_j_aL_L_size, local_j_aL_virtual,
-                        local_j_aL_block, ranges_info_array, ranges_info_rep_size,
-                        BIb_C[j], L_size, BIb_C_rec_j_virtual,
-                        BIb_C_rec_j_block
+                        local_j_aL,                    // Destination
+                        dimen_RI,                      // local_j_aL_L_size
+                        my_B_size[j],                  // local_j_aL_virtual
+                        my_block_size,                 // local_j_aL_block
+                        ranges_info_array,             // ranges_info_array
+                        ranges_info_rep_size,
+                        BIb_C[j],                      // Source: BIb_C_rec
+                        L_size,                        // BIb_C_rec_L_size
+                        my_B_size[j],                  // BIb_C_rec_virtual
+                        my_block_size                  // BIb_C_rec_block
                     );
 
                     // Handle 3
@@ -1843,6 +1841,8 @@ void mp2_ri_gpw_compute_en(
                                 comm_exchange_c
                             );
 
+                            // I use directly the var/values instead of temporal
+                            // to avoid clean the initial
                             fill_local_i_aL(
                                 local_i_aL,                    // Destination
                                 dimen_RI,                      // local_i_aL_L_size
