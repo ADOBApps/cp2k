@@ -388,6 +388,8 @@ void c_mp2_ri_create_group(
     cp_mpi_comm_t comm_para_env_c_comm = cp_mpi_comm_f2c(para_env_comm);
     cp_mpi_comm_t comm_para_env_sub_c_comm = cp_mpi_comm_f2c(para_env_sub_comm);
 
+    comm_exchange_out = comm_para_env_c_comm;
+
     // Get rank and size of the sub-communicator
     int para_env_rank = cp_mpi_comm_rank(comm_para_env_c_comm);
     int para_env_size = cp_mpi_comm_size(comm_para_env_c_comm);
@@ -441,6 +443,9 @@ void c_mp2_ri_create_group(
 
     // Create replication communicator
     MPI_Comm_split(comm_para_env_c_comm, sub_sub_color, exchange_key, &comm_rep_c);
+
+    // Assign replication communicator var
+    comm_rep_out = comm_rep_c;
 
     // Get info about replication communicator
     comm_rep_rank = cp_mpi_comm_rank(comm_rep_c);
@@ -1620,7 +1625,7 @@ void mp2_ri_gpw_compute_en(
         calc_forces, my_group_L_size, my_group_L_size_orig
     );
 
-    cp_mpi_comm_t comm_exchange_c = cp_mpi_comm_f2c(comm_exchange_out);
+    cp_mpi_comm_t comm_exchange_c = comm_exchange_out;
     int tag = 42;
 
     int comm_exchange_rank = 0;
@@ -1821,6 +1826,7 @@ void mp2_ri_gpw_compute_en(
                             size_t rec_size_i = (size_t)rec_L_size * my_B_size[i] * my_block_size;
                             double* BI_C_rec_i = buffer_1D;
                             // BI_C_rec = 0.0_dp memset can work?
+                            // === CHECK
                             memset(BI_C_rec_i, 0, rec_L_size * sizeof(double));
 
                             // CALL comm_exchange%sendrecv(BIb_C(ispin)%array(:, :, send_i:send_i + my_block_size - 1), &
@@ -1910,6 +1916,7 @@ void mp2_ri_gpw_compute_en(
                             
                             // Send: dummy_send to proc_send (not actually used)
                             // Receive: BI_C_rec_i from proc_receive
+                            // ===========IMPLEMENT cp_mpi_recv_double AND REPLACE THIS CALL
                             cp_mpi_sendrecv_double(
                                 &dummy_send,                // Dummy send buffer
                                 0,                          // Send count = 0 (nothing to send)
@@ -1944,6 +1951,7 @@ void mp2_ri_gpw_compute_en(
                             
                             // Send: dummy_send to proc_send (not actually used)
                             // Receive: BI_C_rec_j from proc_receive
+                            // ===========IMPLEMENT cp_mpi_recv_double AND REPLACE THIS CALL
                             cp_mpi_sendrecv_double(
                                 &dummy_send,                // Dummy send buffer
                                 0,                          // Send count = 0 (nothing to send)
@@ -2022,17 +2030,44 @@ void mp2_ri_gpw_compute_en(
                                     (int)ext_size,                      // Receive count
                                     proc_receive,                       // Source
                                     tag,                                // Receive tag
-                                    para_env_sub_comm                 // Communicator
+                                    para_env_sub_comm                   // Communicator
                                 );
                                 
                                 // DGEMM: local_ab += external_i_aL^T * my_local_j_aL
                                 // external_i_aL: (dimen_RI x rec_B_size)
                                 // my_local_j_aL: (dimen_RI x my_B_size[j])
-                                gemm_ctx_dgemm(ctx, 'T', 'N',
-                                                rec_B_size, my_B_size[j], dimen_RI,
-                                                1.0, external_i_aL, dimen_RI,
-                                                my_local_j_aL, dimen_RI,
-                                                1.0, &local_ab[(rec_B_virtual_start - 1) * my_B_size[j]], my_B_size[i]);
+                                /**
+                                 * void gemm_ctx_dgemm(
+                                        gemm_ctx_t *ctx,    // GEMM context
+                                        char transa,        // Transpose A? 'T' or 'N'
+                                        char transb,        // Transpose B? 'T' or 'N'
+                                        int m,              // Rows of C
+                                        int n,              // Columns of C
+                                        int k,              // Inner dimension
+                                        double alpha,       // Scaling for A*B
+                                        const double *A,    // Matrix A
+                                        int lda,            // Leading dimension of A
+                                        const double *B,    // Matrix B
+                                        int ldb,            // Leading dimension of B
+                                        double beta,        // Scaling for C
+                                        double *C,          // Matrix C (output)
+                                        int ldc             // Leading dimension of C
+                                    );
+                                 */
+                                gemm_ctx_dgemm(
+                                    ctx, 'T', 'N',
+                                    rec_B_size,
+                                    my_B_size[j],
+                                    dimen_RI,
+                                    1.0,
+                                    external_i_aL,
+                                    dimen_RI,
+                                    my_local_j_aL,
+                                    dimen_RI,
+                                    1.0,
+                                    &local_ab[(rec_B_virtual_start - 1) * my_B_size[j]],
+                                    my_B_size[i]
+                                );
                             }
 
                             offlad_timeset("mp2_ri_gpw_compute_en_RI_ener\0");
@@ -2058,7 +2093,39 @@ void mp2_ri_gpw_compute_en(
                         }
                     }
 
-                } else {}
+                } else {
+                    /*
+
+                  ! We need it later in case of gradients
+                  my_block_size = 1
+
+                  CALL timeset(routineN//"_comm", handle3)
+                  ! No work to do and we know that we have to receive nothing, but send something
+                  ! send data to other proc
+                  DO proc_shift = 1, comm_exchange%num_pe - 1
+                     proc_send = MODULO(comm_exchange%mepos + proc_shift, comm_exchange%num_pe)
+                     proc_receive = MODULO(comm_exchange%mepos - proc_shift, comm_exchange%num_pe)
+
+                     send_ij_index = num_ij_pairs(proc_send)
+
+                     IF (ij_index <= send_ij_index) THEN
+                        ! something to send
+                        ij_counter_send = (ij_index - MIN(1, integ_group_pos2color_sub(proc_send)))*ngroup + &
+                                          integ_group_pos2color_sub(proc_send)
+                        send_i = ij_map(1, ij_counter_send)
+                        send_j = ij_map(2, ij_counter_send)
+
+                        ! occupied i
+                        CALL comm_exchange%send(BIb_C(ispin)%array(:, :, send_i:send_i + my_block_size - 1), &
+                                                proc_send, tag)
+                        ! occupied j
+                        CALL comm_exchange%send(BIb_C(jspin)%array(:, :, send_j:send_j + my_block_size - 1), &
+                                                proc_send, tag)
+                     END IF
+                  END DO
+                  CALL timestop(handle3)
+                    */
+                }
             }
             // Handle2
             offload_timestop();
@@ -2102,6 +2169,7 @@ void mp2_ri_gpw_compute_en(
       CALL comm_exchange%free()
       CALL comm_rep%free()
      */
+    cp_mpi_comm_free(comm_exchange_c);
 
     /**
      * !================= USE gemm_c_api
