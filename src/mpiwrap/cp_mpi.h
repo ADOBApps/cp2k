@@ -237,4 +237,52 @@ void cp_mpi_allgather_byte(const void *sendbuf, const int sendcount,
 
 #endif
 
+/*******************************************************************************
+ * \brief Wrapper around MPI_Recv for datatype MPI_DOUBLE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_recv_double(double *recvbuf, const int recvcount,
+                        const int source, const int tag,
+                        const cp_mpi_comm_t comm);
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Recv for datatype MPI_BYTE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_recv_byte(void *recvbuf, const int recvcount,
+                      const int source, const int tag,
+                      const cp_mpi_comm_t comm);
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Recv for datatype MPI_INT.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_recv_int(int *recvbuf, const int recvcount,
+                     const int source, const int tag,
+                     const cp_mpi_comm_t comm);
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Send for datatype MPI_DOUBLE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_send_double(const double *sendbuf, const int sendcount,
+                        const int dest, const int tag,
+                        const cp_mpi_comm_t comm);
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Send for datatype MPI_BYTE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_send_byte(const void *sendbuf, const int sendcount,
+                      const int dest, const int tag,
+                      const cp_mpi_comm_t comm);
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Send for datatype MPI_INT.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_send_int(const int *sendbuf, const int sendcount,
+                     const int dest, const int tag,
+                     const cp_mpi_comm_t comm);
+
 // EOF

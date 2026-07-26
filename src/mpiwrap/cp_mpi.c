@@ -608,4 +608,139 @@ void cp_mpi_allgather_byte(const void *sendbuf, const int sendcount,
 #endif
 }
 
+/*******************************************************************************
+ * \brief Wrapper around MPI_Recv for datatype MPI_DOUBLE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_recv_double(double *recvbuf, const int recvcount,
+                        const int source, const int tag,
+                        const cp_mpi_comm_t comm) {
+#if defined(__parallel)
+  MPI_Status status;
+  if (MPI_COMM_NULL != comm) {
+    CHECK(MPI_Recv(recvbuf, recvcount, MPI_DOUBLE, source, tag, comm, &status));
+  }
+#else
+  (void)recvbuf;
+  (void)recvcount;
+  (void)source;
+  (void)tag;
+  (void)comm;
+  fprintf(stderr, "Error: cp_mpi_recv_double not available without MPI\n");
+  abort();
+#endif
+}
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Recv for datatype MPI_BYTE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_recv_byte(void *recvbuf, const int recvcount,
+                      const int source, const int tag,
+                      const cp_mpi_comm_t comm) {
+#if defined(__parallel)
+  MPI_Status status;
+  if (MPI_COMM_NULL != comm) {
+    CHECK(MPI_Recv(recvbuf, recvcount, MPI_BYTE, source, tag, comm, &status));
+  }
+#else
+  (void)recvbuf;
+  (void)recvcount;
+  (void)source;
+  (void)tag;
+  (void)comm;
+  fprintf(stderr, "Error: cp_mpi_recv_byte not available without MPI\n");
+  abort();
+#endif
+}
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Recv for datatype MPI_INT.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_recv_int(int *recvbuf, const int recvcount,
+                     const int source, const int tag,
+                     const cp_mpi_comm_t comm) {
+#if defined(__parallel)
+  MPI_Status status;
+  if (MPI_COMM_NULL != comm) {
+    CHECK(MPI_Recv(recvbuf, recvcount, MPI_INT, source, tag, comm, &status));
+  }
+#else
+  (void)recvbuf;
+  (void)recvcount;
+  (void)source;
+  (void)tag;
+  (void)comm;
+  fprintf(stderr, "Error: cp_mpi_recv_int not available without MPI\n");
+  abort();
+#endif
+}
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Send for datatype MPI_DOUBLE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_send_double(const double *sendbuf, const int sendcount,
+                        const int dest, const int tag,
+                        const cp_mpi_comm_t comm) {
+#if defined(__parallel)
+  if (MPI_COMM_NULL != comm) {
+    CHECK(MPI_Send(sendbuf, sendcount, MPI_DOUBLE, dest, tag, comm));
+  }
+#else
+  (void)sendbuf;
+  (void)sendcount;
+  (void)dest;
+  (void)tag;
+  (void)comm;
+  fprintf(stderr, "Error: cp_mpi_send_double not available without MPI\n");
+  abort();
+#endif
+}
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Send for datatype MPI_BYTE.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_send_byte(const void *sendbuf, const int sendcount,
+                      const int dest, const int tag,
+                      const cp_mpi_comm_t comm) {
+#if defined(__parallel)
+  if (MPI_COMM_NULL != comm) {
+    CHECK(MPI_Send(sendbuf, sendcount, MPI_BYTE, dest, tag, comm));
+  }
+#else
+  (void)sendbuf;
+  (void)sendcount;
+  (void)dest;
+  (void)tag;
+  (void)comm;
+  fprintf(stderr, "Error: cp_mpi_send_byte not available without MPI\n");
+  abort();
+#endif
+}
+
+/*******************************************************************************
+ * \brief Wrapper around MPI_Send for datatype MPI_INT.
+ * \author Acxel Orozco
+ ******************************************************************************/
+void cp_mpi_send_int(const int *sendbuf, const int sendcount,
+                     const int dest, const int tag,
+                     const cp_mpi_comm_t comm) {
+#if defined(__parallel)
+  if (MPI_COMM_NULL != comm) {
+    CHECK(MPI_Send(sendbuf, sendcount, MPI_INT, dest, tag, comm));
+  }
+#else
+  (void)sendbuf;
+  (void)sendcount;
+  (void)dest;
+  (void)tag;
+  (void)comm;
+  fprintf(stderr, "Error: cp_mpi_send_int not available without MPI\n");
+  abort();
+#endif
+}
+
 // EOF
