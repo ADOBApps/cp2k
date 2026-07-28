@@ -1835,6 +1835,19 @@ void mp2_ri_gpw_compute_en(
                             // size_t offser_i = ((size_t)(send_i - 1) * my_B_size[i]);
                             double* send_buffer_i = &BIb_C[i][((size_t)(send_i - 1) * my_B_size[i]) * my_group_L_size];
 
+                            /*========= VERSION 1
+                            cp_mpi_sendrecv_double(
+                                const double *sendbuf,
+                                const int sendcount,
+                                const int dest,
+                                const int sendtag,
+                                double *recvbuf,
+                                const int recvcount,
+                                const int source,
+                                const int recvtag,
+                                const cp_mpi_comm_t comm
+                            ); */
+
                             cp_mpi_sendrecv_double(
                                 send_buffer_i,
                                 (int)send_size_i,
@@ -1874,6 +1887,18 @@ void mp2_ri_gpw_compute_en(
                             // size_t offser_j = ((size_t)(send_j - 1) * my_B_size[j]);
                             double* send_buffer_j = &BIb_C[j][((size_t)(send_j - 1) * my_B_size[j]) * my_group_L_size];
 
+                            /**============== VERSION 1
+                            cp_mpi_sendrecv_double(
+                                const double *sendbuf,
+                                const int sendcount,
+                                const int dest,
+                                const int sendtag,
+                                double *recvbuf,
+                                const int recvcount,
+                                const int source,
+                                const int recvtag,
+                                const cp_mpi_comm_t comm
+                            ); */
                             cp_mpi_sendrecv_double(
                                 send_buffer_j,
                                 (int)send_size_j,
@@ -1906,17 +1931,14 @@ void mp2_ri_gpw_compute_en(
                             size_t rec_size_i = (size_t)rec_L_size * my_B_size[i] * my_block_size;
                             double* BI_C_rec_i = buffer_1D;
                             memset(BI_C_rec_i, 0, rec_size_i * sizeof(double));
-                            
-
-                            // cp_mpi_sendrecv_double requires a send buffer
-                            // Even when we have nothing to send, we still need to call it
-                            // with a valid send buffer (can be dummy)
 
                             double dummy_send = 0.0;
                             
                             // Send: dummy_send to proc_send (not actually used)
                             // Receive: BI_C_rec_i from proc_receive
                             // ===========IMPLEMENT cp_mpi_recv_double AND REPLACE THIS CALL
+
+                            /**
                             cp_mpi_sendrecv_double(
                                 &dummy_send,                // Dummy send buffer
                                 0,                          // Send count = 0 (nothing to send)
@@ -1925,6 +1947,22 @@ void mp2_ri_gpw_compute_en(
                                 BI_C_rec_i,                 // Receive buffer
                                 (int)rec_size_i,            // Receive count
                                 proc_receive,               // Source
+                                tag,                        // Receive tag
+                                comm_exchange_c             // Communicator
+                            );
+                            cp_mpi_recv_double(
+                                double *recvbuf,
+                                const int recvcount,
+                                const int source,
+                                const int tag,
+                                const cp_mpi_comm_t comm
+                            );
+                             */
+
+                            cp_mpi_recv_double(
+                                BI_C_rec_i,                 // Receive buffer
+                                (int)rec_size_i,            // Receive count
+                                proc_receive,               // Source (shoul be proc_send?)
                                 tag,                        // Receive tag
                                 comm_exchange_c             // Communicator
                             );
@@ -1952,6 +1990,8 @@ void mp2_ri_gpw_compute_en(
                             // Send: dummy_send to proc_send (not actually used)
                             // Receive: BI_C_rec_j from proc_receive
                             // ===========IMPLEMENT cp_mpi_recv_double AND REPLACE THIS CALL
+
+                            /**
                             cp_mpi_sendrecv_double(
                                 &dummy_send,                // Dummy send buffer
                                 0,                          // Send count = 0 (nothing to send)
@@ -1960,6 +2000,22 @@ void mp2_ri_gpw_compute_en(
                                 BI_C_rec_j,                 // Receive buffer
                                 (int)rec_size_j,            // Receive count
                                 proc_receive,               // Source
+                                tag,                        // Receive tag
+                                comm_exchange_c             // Communicator
+                            );
+                            cp_mpi_recv_double(
+                                double *recvbuf,
+                                const int recvcount,
+                                const int source,
+                                const int tag,
+                                const cp_mpi_comm_t comm
+                            );
+                             */
+
+                            cp_mpi_recv_double(
+                                BI_C_rec_j,                 // Receive buffer
+                                (int)rec_size_j,            // Receive count
+                                proc_receive,               // Source (shoul be proc_send?)
                                 tag,                        // Receive tag
                                 comm_exchange_c             // Communicator
                             );
@@ -2094,37 +2150,70 @@ void mp2_ri_gpw_compute_en(
                     }
 
                 } else {
-                    /*
+                    int my_block_size = 1;
+                    offlad_timeset("mp2_ri_gpw_compute_en_RI_comm\0");
+                    for (int proc_shift = 1; proc_shift < comm_exchange_size; proc_shift++) {
+                        // Calculate send and receive process ranks
+                        int proc_send = (comm_exchange_rank + proc_shift) % comm_exchange_size;
+                        int proc_receive = (comm_exchange_rank - proc_shift + comm_exchange_size) % comm_exchange_size;
+                        
+                        //Get the number ij pairs for the sending process
+                        int send_ij_index = num_ij_pairs[proc_send];
 
-                  ! We need it later in case of gradients
-                  my_block_size = 1
+                        // Get the L-size for the receiving process (rec_L_sizes)
+                        int rec_L_size = gd_array_sizes[proc_receive];
 
-                  CALL timeset(routineN//"_comm", handle3)
-                  ! No work to do and we know that we have to receive nothing, but send something
-                  ! send data to other proc
-                  DO proc_shift = 1, comm_exchange%num_pe - 1
-                     proc_send = MODULO(comm_exchange%mepos + proc_shift, comm_exchange%num_pe)
-                     proc_receive = MODULO(comm_exchange%mepos - proc_shift, comm_exchange%num_pe)
+                        if (ij_index <= send_ij_index) {
+                            // Calculate send indices for this ij pair
+                            int ij_counter_send = (ij_index - 1) * ngroup + integ_group_pos2color_sub[proc_send];
+                            int send_i = ij_map[0 * total_ij_pairs + ij_counter_send - 1];
+                            int send_j = ij_map[1 * total_ij_pairs + ij_counter_send - 1];
+                            
+                            // Occupied i: send and receive data
+                            // Fortran BI_C_rec(1:rec_L_size, 1:my_B_size(ispin), 1:my_block_size)
+                            // C: Flattened as [block][virtual][L]
+                            // index: (i_block * virtual + a) * rec_L_size + (L - 1)
 
-                     send_ij_index = num_ij_pairs(proc_send)
+                            size_t rec_size_i = (size_t)rec_L_size * my_B_size[i] * my_block_size;
+                            double* BI_C_rec_i = buffer_1D;
+                            memset(BI_C_rec_i, 0, rec_L_size * sizeof(double));
 
-                     IF (ij_index <= send_ij_index) THEN
-                        ! something to send
-                        ij_counter_send = (ij_index - MIN(1, integ_group_pos2color_sub(proc_send)))*ngroup + &
-                                          integ_group_pos2color_sub(proc_send)
-                        send_i = ij_map(1, ij_counter_send)
-                        send_j = ij_map(2, ij_counter_send)
+                            // CALL comm_exchange%sendrecv(BIb_C(ispin)%array(:, :, send_i:send_i + my_block_size - 1), &
+                            //                        proc_send, BI_C_rec, proc_receive, tag)
+                            size_t send_size_i = (size_t)my_group_L_size * my_B_size[i] * my_block_size;
+                            // size_t offser_i = ((size_t)(send_i - 1) * my_B_size[i]);
+                            double* send_buffer_i = &BIb_C[i][((size_t)(send_i - 1) * my_B_size[i]) * my_group_L_size];
 
-                        ! occupied i
-                        CALL comm_exchange%send(BIb_C(ispin)%array(:, :, send_i:send_i + my_block_size - 1), &
-                                                proc_send, tag)
-                        ! occupied j
-                        CALL comm_exchange%send(BIb_C(jspin)%array(:, :, send_j:send_j + my_block_size - 1), &
-                                                proc_send, tag)
-                     END IF
-                  END DO
-                  CALL timestop(handle3)
-                    */
+                            cp_mpi_send_double(
+                                send_buffer_i,
+                                (int)send_size_i,
+                                proc_send,
+                                tag,
+                                comm_exchange_c
+                            );
+
+                            // Occupied j: send and receive data
+                            size_t rec_size_j = (size_t)rec_L_size * my_B_size[j] * my_block_size;
+                            double* BI_C_rec_j = buffer_1D + rec_size_i; // Start of receive vuffer for j
+                            // BI_C_rec = 0.0_dp memset can work?
+                            memset(BI_C_rec_j, 0, rec_size_j * sizeof(double));
+
+                            // CALL comm_exchange%sendrecv(BIb_C(ispin)%array(:, :, send_i:send_i + my_block_size - 1), &
+                            //                        proc_send, BI_C_rec, proc_receive, tag)
+                            size_t send_size_j = (size_t)my_group_L_size * my_B_size[j] * my_block_size;
+                            // size_t offser_j = ((size_t)(send_j - 1) * my_B_size[j]);
+                            double* send_buffer_j = &BIb_C[j][((size_t)(send_j - 1) * my_B_size[j]) * my_group_L_size];
+
+                            cp_mpi_send_double(
+                                send_buffer_j,
+                                (int)send_size_j,
+                                proc_send,
+                                tag,
+                                comm_exchange_c
+                            );
+                        }
+                    }
+                    offload_timestop();
                 }
             }
             // Handle2
