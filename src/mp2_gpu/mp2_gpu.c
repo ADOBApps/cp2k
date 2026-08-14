@@ -211,7 +211,7 @@ void c_mp2_ri_create_group(
     int comm_rep_rank = 0;
     int comm_rep_size = 0;
 
-    int my_new_group_L_size = my_group_L_size;
+    int my_new_group_L_size = *my_group_L_size;
 
     int sub_sub_color_exchange = para_env_sub_rank * num_integ_group + color_sub / integ_group_size;
 
@@ -257,7 +257,7 @@ void c_mp2_ri_create_group(
     int* rep_starts_array = (int*)malloc(comm_rep_size * sizeof(int));
     int* rep_ends_array = (int*)malloc(comm_rep_size * sizeof(int));
 
-    cp_mpi_allgather_int(&my_group_L_size, 1, rep_sizes_array, 1, comm_rep_c);
+    cp_mpi_allgather_int(my_group_L_size, 1, rep_sizes_array, 1, comm_rep_c);
     cp_mpi_allgather_int(&my_group_L_start, 1, rep_starts_array, 1, comm_rep_c);
     cp_mpi_allgather_int(&my_group_L_end, 1, rep_ends_array, 1, comm_rep_c);
 
@@ -268,9 +268,9 @@ void c_mp2_ri_create_group(
     my_info[0 * comm_rep_size + 0] = my_group_L_start; // start
     my_info[1 * comm_rep_size + 0] = my_group_L_end; // end
     my_info[2 * comm_rep_size + 0] = 0; // local_start
-    my_info[3 * comm_rep_size + 0] = my_group_L_size-1; // local_end
+    my_info[3 * comm_rep_size + 0] = *my_group_L_size-1; // local_end
 
-    my_new_group_L_size = my_group_L_size;
+    my_new_group_L_size = *my_group_L_size;
 
     // Loop ove other processes in replication group
     for (int proc_shift = 1; proc_shift < comm_rep_size; proc_shift++) {
