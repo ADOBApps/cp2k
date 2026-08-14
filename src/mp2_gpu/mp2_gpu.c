@@ -185,7 +185,7 @@ void c_mp2_ri_create_group(
     int color_sub,
     int integ_group_size,
     int num_integ_group,
-    int my_group_L_size
+    int * my_group_L_size // Should be a pointer
 ) {
     // Convert Fortran MPI communicators to C MPI communicators
     cp_mpi_comm_t comm_para_env_c_comm = cp_mpi_comm_f2c(comm_all);
@@ -300,6 +300,7 @@ void c_mp2_ri_create_group(
     cp_mpi_allgather_int(&color_sub, 1, integ_group_pos2color_sub, 1, comm_exchange_c);
     cp_mpi_allgather_int(&my_new_group_L_size, 1, new_sizes_array, 1, comm_exchange_c);
 
+    *my_group_L_size = my_new_group_L_size;
     if (my_info) free(my_info);
     // DEALLOCATE (new_sizes_array)
     if (new_sizes_array) free(new_sizes_array);
@@ -431,11 +432,6 @@ double* c_replicate_iaK_2intgroup(
     
     // Free gather buffer
     free(BIb_C_gather);
-    
-    // Return new BIb_C
-    // *BIb_C = BIb_C_new; //INTOUT
-    // BIb_C = BIb_C_new; //INTOUT
-    BIb_C_L_size = my_group_L_size;
 
     // stop the timer
     offload_timestop();
@@ -448,9 +444,6 @@ void c_mp2_ri_allocate_no_blk(
 ) {
     //Start timer
     offload_timeset("mp2_ri_allocate_no_blk\0");
-
-    // ALLOCATE(local_ab(virtual(ispin), my_B_size(jspin)))
-    // local_ab = 0.0_dp
 
     // *local_ab = (double*)calloc((size_t)virtual[i_c] * my_B_size[j_c], sizeof(double));
     *local_ab = (double*)calloc((size_t)virtual * my_B_size, sizeof(double));
@@ -863,6 +856,7 @@ void calc_ri_mp2_energy(
     ranges_info_array = (int*)calloc(4 * comm_rep_size * comm_exchange_size, sizeof(int));
     integ_group_pos2color_sub = (int*)calloc(comm_exchange_size, sizeof(int));
 
+    int my_group_L_size_orig = my_group_L_size;
     c_mp2_ri_create_group(
         &comm_exchange_out,
         &comm_rep_out,
@@ -875,7 +869,7 @@ void calc_ri_mp2_energy(
         color_sub,
         integ_group_size,
         num_integ_group,
-        my_group_L_size
+        &my_group_L_size
     );
 
     cp_mpi_comm_t comm_exchange_c = cp_mpi_comm_f2c(comm_exchange_out);
@@ -916,7 +910,7 @@ void calc_ri_mp2_energy(
 
     double* replicated_BIb_C = c_replicate_iaK_2intgroup(
         BIb_C,
-        my_group_L_size,
+        my_group_L_size_orig,
         comm_exchange_out,
         comm_rep_out,
         homo,
@@ -1020,8 +1014,8 @@ void calc_ri_mp2_energy(
             // const int* ranges_info_array;
             int ranges_info_rep_size = comm_rep_size;
 
-            double* BIb_C_i_offset = &replicated_BIb_C[((size_t)my_i * my_B_size) * my_group_L_size];
-            double* BIb_C_j_offset = &replicated_BIb_C[((size_t)my_j * my_B_size) * my_group_L_size];
+            double* BIb_C_i_offset = &replicated_BIb_C[((size_t)my_i * my_B_size) * (my_group_L_size)];
+            double* BIb_C_j_offset = &replicated_BIb_C[((size_t)my_j * my_B_size) * (my_group_L_size)];
 
             fill_local_i_aL(
                 local_i_aL,                 // Destination
