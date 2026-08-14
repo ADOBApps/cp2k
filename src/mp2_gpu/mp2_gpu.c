@@ -22,7 +22,6 @@
 // Helper function to find integration group size
 static int find_integ_group_size(int ngroup, int max_repl_group_size) {
     int integ_group_size = ngroup;
-    int min_repl_group_size = ngroup / max_repl_group_size;
 
     if (max_repl_group_size < 1) {
         max_repl_group_size = 1;
@@ -30,8 +29,9 @@ static int find_integ_group_size(int ngroup, int max_repl_group_size) {
 
     if(max_repl_group_size > ngroup) {
         max_repl_group_size = ngroup;
-
     }
+
+    int min_repl_group_size = ngroup / max_repl_group_size;
 
     if (min_repl_group_size < 1) {
         min_repl_group_size = 1;
@@ -120,11 +120,9 @@ void c_mp2_ri_get_integ_group_size(
     mem_base += (double)max_dim * maxval_gd_B_virtual * 8.0 / (1024.0 * 1024.0);
     
     block_size = (int)sqrt((double)homo);
-    // ===== IMPLEMENT MIN AND MAX FUNCTIONS
-    // AVOID USING temp variables
     // block_size = MAX(1, MIN(FLOOR(SQRT(REAL(MINVAL(homo), KIND=dp))), FLOOR(MINVAL(homo)/SQRT(2.0_dp*ngroup))))
-    block_size = (int)(homo / sqrt(2.0 * ngroup));
-    // USE MAX FUNCTION (I SHOULD IMPLEMENT IT)
+    int block_size_pre = (int)(homo / sqrt(2.0 * ngroup));
+    block_size = (block_size_pre < block_size) ? block_size_pre : block_size;
     block_size = (block_size < 1) ? 1 : block_size;
     
     mem_min = mem_base + mem_per_repl + (mem_per_blk + mem_per_repl_blk) * block_size;
@@ -618,9 +616,9 @@ void c_mp2_ri_communication(
 
             // ij_marker(iiB:iiB + block_size - 1, jjB:jjB + block_size - 1) = .FALSE.
             // i = iiB - 1 (index 0 in C)
-            for (int i = iiB; i <= iiB + block_size - 1; i++) {
+            for (int i = iiB - 1; i <= iiB + block_size - 1; i++) {
                 // j = jjB - 1 (index 0 in C)
-                for (int j = jjB; j <= jjB + block_size - 1; j++) {
+                for (int j = jjB - 1; j <= jjB + block_size - 1; j++) {
                     ij_marker[i * homo + j] = false;
                 }
             }
@@ -1064,7 +1062,7 @@ void calc_ri_mp2_energy(
                     int ij_counter_send = (ij_index - correction_send) * ngroup + integ_group_pos2color_sub[proc_send];
 
                     // Assert bounds
-                    assert(ij_counter_send >= 1 && ij_counter_send <- total_ij_pairs_blocks);
+                    assert(ij_counter_send >= 1 && ij_counter_send <= total_ij_pairs_blocks);
 
                     int send_i = ij_map[0 * total_ij_pairs_blocks + ij_counter_send - 1];
                     int send_j = ij_map[1 * total_ij_pairs_blocks + ij_counter_send - 1];
