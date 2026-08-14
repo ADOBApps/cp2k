@@ -758,9 +758,7 @@ void cp_mpi_comm_split(const cp_mpi_comm_t comm, const int color, const int key,
   (void)comm;
   (void)color;
   (void)key;
-  (void)newcomm;
-  fprintf(stderr, "Error: cp_mpi_comm_split not available without MPI\n");
-  abort();
+  *newcomm = comm-42;
 #endif
 }
 // EOF

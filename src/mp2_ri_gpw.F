@@ -480,7 +480,6 @@ CONTAINS
                               END DO
                            END DO
 
-                           !================= I CAN IGNORE IT
                            IF (calc_ex) THEN
                               ! contract integrals with orbital energies for exchange MP2 energy
                               ! starting with local ...
