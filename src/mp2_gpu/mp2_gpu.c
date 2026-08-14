@@ -22,6 +22,7 @@
 // Helper function to find integration group size
 static int find_integ_group_size(int ngroup, int max_repl_group_size) {
     int integ_group_size = ngroup;
+    int min_repl_group_size = ngroup / max_repl_group_size;
 
     if (max_repl_group_size < 1) {
         max_repl_group_size = 1;
@@ -30,8 +31,6 @@ static int find_integ_group_size(int ngroup, int max_repl_group_size) {
     if(max_repl_group_size > ngroup) {
         max_repl_group_size = ngroup;
     }
-
-    int min_repl_group_size = ngroup / max_repl_group_size;
 
     if (min_repl_group_size < 1) {
         min_repl_group_size = 1;
@@ -122,6 +121,7 @@ void c_mp2_ri_get_integ_group_size(
     block_size = (int)sqrt((double)homo);
     // block_size = MAX(1, MIN(FLOOR(SQRT(REAL(MINVAL(homo), KIND=dp))), FLOOR(MINVAL(homo)/SQRT(2.0_dp*ngroup))))
     block_size = (int)(homo / sqrt(2.0 * ngroup));
+    // USE MAX FUNCTION (I SHOULD IMPLEMENT IT)
     block_size = (block_size < 1) ? 1 : block_size;
     
     mem_min = mem_base + mem_per_repl + (mem_per_blk + mem_per_repl_blk) * block_size;
@@ -621,14 +621,14 @@ void c_mp2_ri_communication(
                 }
             }
 
-	    printf("ij_counter: %d, iiB: %d, jjB: %d, block_size: %d\n", ij_counter, iiB, jjB, block_size);
+            printf("ij_counter: %d, iiB: %d, jjB: %d, block_size: %d\n", ij_counter, iiB, jjB, block_size);
             (*ij_map)[0 * total_ij_pairs_blocks + ij_counter] = iiB;
             (*ij_map)[1 * total_ij_pairs_blocks + ij_counter] = jjB;
             (*ij_map)[2 * total_ij_pairs_blocks + ij_counter] = block_size;
             if (ij_counter % ngroup == color_sub) {
                 (*my_ij_pairs)++;
             }
-	        ij_counter++;
+            ij_counter++;
         }
     }
 
@@ -638,14 +638,14 @@ void c_mp2_ri_communication(
             // 0-based in C-stlr
             if (ij_marker[iiB * homo + jjB]) {
                 ij_marker[iiB * homo + jjB] = false;
-		printf("ij_counter: %d, iiB: %d, jjB: %d, block_size: %d\n", ij_counter, iiB, jjB, block_size);
+                printf("ij_counter: %d, iiB: %d, jjB: %d, block_size: %d\n", ij_counter, iiB, jjB, block_size);
                 (*ij_map)[0 * total_ij_pairs_blocks + ij_counter] = iiB;
                 (*ij_map)[1 * total_ij_pairs_blocks + ij_counter] = jjB;
                 (*ij_map)[2 * total_ij_pairs_blocks + ij_counter] = 1;
                 if ((ij_counter % ngroup) == color_sub) {
                     (*my_ij_pairs)++;
                 }
-		        ij_counter++;
+		ij_counter++;
             }
         }
     }
