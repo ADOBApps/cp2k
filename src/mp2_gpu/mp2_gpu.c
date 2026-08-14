@@ -300,8 +300,9 @@ void c_mp2_ri_create_group(
     cp_mpi_allgather_int(&color_sub, 1, integ_group_pos2color_sub, 1, comm_exchange_c);
     cp_mpi_allgather_int(&my_new_group_L_size, 1, new_sizes_array, 1, comm_exchange_c);
 
+    if (my_info) free(my_info);
     // DEALLOCATE (new_sizes_array)
-    free(new_sizes_array);
+    if (new_sizes_array) free(new_sizes_array);
 
     // time stop
     offload_timestop();
@@ -1469,6 +1470,8 @@ void calc_ri_mp2_energy(
     if (ranges_info_array) free(ranges_info_array);
     if (integ_group_pos2color_sub) free(integ_group_pos2color_sub);
     if (sizes_array_orig) free(sizes_array_orig);
+    if (gd_B_virtual_start) free(gd_B_virtual_start);
+    if (gd_B_virtual_end) free(gd_B_virtual_end);
     
     printf("Energy my_E_cou pre-cp_mpi_sum_double call: %f\n", my_E_cou);
     fflush(stdout);
