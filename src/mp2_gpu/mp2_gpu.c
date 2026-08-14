@@ -193,13 +193,8 @@ void c_mp2_ri_create_group(
 
     *comm_exchange_out = comm_para_env_c_comm;
 
-    printf("Get cp_mpi_comm_rank 1st time\n");
-    fflush(stdout);
     // Get rank and size of the sub-communicator
     int para_env_rank = cp_mpi_comm_rank(comm_para_env_c_comm);
-    
-    printf("Get cp_mpi_comm_rank 2nd time\n");
-    fflush(stdout);
     int para_env_sub_rank = cp_mpi_comm_rank(comm_para_env_sub_c_comm);
 
     // Local variables
@@ -224,16 +219,7 @@ void c_mp2_ri_create_group(
     cp_mpi_comm_split(comm_para_env_c_comm, sub_sub_color_exchange, exchange_key, &comm_exchange_c);
     *comm_exchange_out = cp_mpi_comm_c2f(comm_exchange_c); // convert back to Fortran communicator
 
-    // Get info about exchange communicator
-    printf("Get cp_mpi_comm_rank 3rd time\n");
-    printf("Get cp_mpi_comm_rank call: color %d\n", sub_sub_color_exchange);
-    printf("Get cp_mpi_comm_rank call: key %d\n", exchange_key);
-    printf("Get cp_mpi_comm_rank call: comm_exchange_out %p\n", (void*)comm_exchange_out);
-    fflush(stdout);
-
     comm_exchange_rank = cp_mpi_comm_rank(comm_exchange_c);
-    printf("Get cp_mpi_comm_rank 3.1 time: comm_exchange_rank %d\n", comm_exchange_rank);
-    fflush(stdout);
     comm_exchange_size = cp_mpi_comm_size(comm_exchange_c);
 
     offload_timeset("mp2_ri_create_group\0");
@@ -247,8 +233,6 @@ void c_mp2_ri_create_group(
     *comm_rep_out = cp_mpi_comm_c2f(comm_rep_c);
 
     // Get info about replication communicator
-    printf("Get cp_mpi_comm_rank 4th time\n");
-    fflush(stdout);
     comm_rep_rank = cp_mpi_comm_rank(comm_rep_c);
     comm_rep_size = cp_mpi_comm_size(comm_rep_c);
 
@@ -324,13 +308,7 @@ double* c_replicate_iaK_2intgroup(
     cp_mpi_comm_t comm_rep_c = cp_mpi_comm_f2c(comm_rep);
     
     int comm_rep_size = cp_mpi_comm_size(comm_rep_c);
-    
-    printf("Get cp_mpi_comm_rank 5th time\n");
-    fflush(stdout);
     int comm_exchange_rank = cp_mpi_comm_rank(comm_exchange_c);
-    
-    printf("Get cp_mpi_comm_rank 6th time\n");
-    fflush(stdout);
     int comm_rep_rank = cp_mpi_comm_rank(comm_rep_c);
 
     offload_timeset("replicate_iaK_2intgroup\0");
@@ -340,8 +318,6 @@ double* c_replicate_iaK_2intgroup(
 
     // Allocate copy buffer: [L][virtual][occupied]
     size_t copy_size = (size_t)max_L_size * my_B_size * homo;
-    printf("6.1th f m: copy_size: %zu\n", copy_size);
-    fflush(stdout);
     double* BIb_C_copy = (double*)calloc(copy_size, sizeof(double));
 
     if (BIb_C_copy == NULL) {
@@ -366,13 +342,6 @@ double* c_replicate_iaK_2intgroup(
     double* BIb_C_gather = (double*)calloc(gather_size, sizeof(double));
     
     int send_count = (int)(max_L_size * my_B_size * homo);
-
-    printf("6.3th f m: cp_mpi_allgather_double: comm_rep_size=%d, max_L_size=%d, my_B_size=%d, homo=%d\n",
-        comm_rep_size,
-        max_L_size,
-        my_B_size,
-        homo
-    );
     cp_mpi_allgather_double(BIb_C_copy, send_count, BIb_C_gather, send_count, comm_rep_c);
     
     // Free copy buffer
@@ -615,7 +584,6 @@ void c_mp2_ri_communication(
                 }
             }
 
-            printf("ij_counter: %d, iiB: %d, jjB: %d, block_size: %d\n", ij_counter, iiB, jjB, block_size);
             (*ij_map)[0 * total_ij_pairs_blocks + ij_counter] = iiB;
             (*ij_map)[1 * total_ij_pairs_blocks + ij_counter] = jjB;
             (*ij_map)[2 * total_ij_pairs_blocks + ij_counter] = block_size;
@@ -632,7 +600,6 @@ void c_mp2_ri_communication(
             // 0-based in C-stlr
             if (ij_marker[iiB * homo + jjB]) {
                 ij_marker[iiB * homo + jjB] = false;
-                printf("ij_counter: %d, iiB: %d, jjB: %d, block_size: %d\n", ij_counter, iiB, jjB, block_size);
                 (*ij_map)[0 * total_ij_pairs_blocks + ij_counter] = iiB;
                 (*ij_map)[1 * total_ij_pairs_blocks + ij_counter] = jjB;
                 (*ij_map)[2 * total_ij_pairs_blocks + ij_counter] = 1;
@@ -799,9 +766,6 @@ void calc_ri_mp2_energy(
     int virtual = nmo - homo;
 
     int para_env_size = cp_mpi_comm_size(comm_all);
-    
-    printf("Get cp_mpi_comm_rank 7th time\n");
-    fflush(stdout);
     int para_env_sub_rank = cp_mpi_comm_rank(comm_sub);
     int para_env_sub_size = cp_mpi_comm_size(comm_sub);
 
@@ -873,13 +837,7 @@ void calc_ri_mp2_energy(
     );
 
     cp_mpi_comm_t comm_exchange_c = cp_mpi_comm_f2c(comm_exchange_out);
-    
-    printf("Get cp_mpi_comm_rank 8th time\n");
-    fflush(stdout);
     int comm_exchange_rank = cp_mpi_comm_rank(comm_exchange_c);
-    
-    printf("Get cp_mpi_comm_rank 9th time\n");
-    fflush(stdout);
     int tag = 42;
 
     double my_E_cou = 0.0;
@@ -894,19 +852,11 @@ void calc_ri_mp2_energy(
             max_L_size = gd_array_sizes[i];
         }
     }
-
-    printf("DEBUG: BIb_C in calc_ri_mp2_energy = %p\n", (void*)BIb_C);
-    fflush(stdout);
     
     if (BIb_C == NULL) {
         fprintf(stderr, "ERROR: BIb_C is NULL in calc_ri_mp2_energy!\n");
         return;
     }
-    
-    // Try to read first few values
-    // printf("DEBUG: BIb_C[0] = %f\n", BIb_C[0]);
-    // printf("DEBUG: BIb_C[1] = %f\n", BIb_C[1]);
-    // fflush(stdout);
 
     double* replicated_BIb_C = c_replicate_iaK_2intgroup(
         BIb_C,
@@ -1225,21 +1175,6 @@ void calc_ri_mp2_energy(
                     double* my_local_i_aL = &local_i_aL[(size_t)iiB * my_B_size * dimen_RI];
                     double* my_local_j_aL = &local_j_aL[(size_t)jjB * my_B_size * dimen_RI];
 
-                    printf(
-                        "DEBUG iiB=%d jjB=%d my_i=%d my_j=%d my_block_size=%d my_B_size=%d dimen_RI=%d virtual=%d\n",
-                        iiB,
-                        jjB,
-                        my_i,
-                        my_j,
-                        my_block_size,
-                        my_B_size,
-                        dimen_RI,
-                        virtual
-                    );
-                    printf("DEBUG local_i_aL[0..2] = %g %g %g\n", local_i_aL[0], local_i_aL[1], local_i_aL[2]);
-                    printf("DEBUG local_j_aL[0..2] = %g %g %g\n", local_j_aL[0], local_j_aL[1], local_j_aL[2]);
-                    fflush(stdout);
-
                     gemm_ctx_dgemm(
                         ctx, 'T', 'N',
                         my_B_size, my_B_size, dimen_RI,
@@ -1466,16 +1401,12 @@ void calc_ri_mp2_energy(
     if (sizes_array_orig) free(sizes_array_orig);
     if (gd_B_virtual_start) free(gd_B_virtual_start);
     if (gd_B_virtual_end) free(gd_B_virtual_end);
-    
-    printf("Energy my_E_cou pre-cp_mpi_sum_double call: %f\n", my_E_cou);
-    fflush(stdout);
+
     cp_mpi_sum_double(&my_E_cou, 1, comm_all);
     cp_mpi_sum_double(&my_E_ex, 1, comm_all);
 
     // Follow this var
     *E_cou += my_E_cou;
-    printf("Energy my_E_cou: %f\n", my_E_cou);
-    fflush(stdout);
     *E_ex += my_E_ex;
     *E_s += my_E_s;
     *E_t += my_E_t;
