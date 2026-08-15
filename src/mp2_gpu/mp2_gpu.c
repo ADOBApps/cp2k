@@ -280,7 +280,7 @@ void c_mp2_ri_create_group(
 
     // Loop ove other processes in replication group
     for (int proc_shift = 1; proc_shift < comm_rep_size; proc_shift++) {
-        int proc_receive = modulo_frotran(comm_rep_rank - proc_shift, comm_rep_size);
+        int proc_receive = modulo_fortran(comm_rep_rank - proc_shift, comm_rep_size);
         
         // Update new group size
         my_new_group_L_size += rep_sizes_array[proc_receive];
@@ -517,7 +517,8 @@ void c_mp2_ri_get_block_size(
         }
         
         int sqrt_val = (int)sqrt((double)homo);
-        best_block_size = (sqrt_val < best_block_size) ? sqrt_val : best_block_size;
+        // best_block_size = (sqrt_val < best_block_size) ? sqrt_val : best_block_size;
+        best_block_size = min_int(sqrt_val, best_block_size);
     }
     
     *block_size = (best_block_size < 1) ? 1 : best_block_size;
