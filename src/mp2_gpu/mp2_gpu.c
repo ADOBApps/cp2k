@@ -43,9 +43,9 @@ static double min_double(double a, double b) {
 static int max_int(int a, int b) {
     return (a > b) ? a : b;
 }
-static double max_double(double a, double b) {
-    return (a > b) ? a : b;
-}
+// static double max_double(double a, double b) {
+//     return (a > b) ? a : b;
+// }
 
 // Helper function to find integration group size
 static int find_integ_group_size(int ngroup, int max_repl_group_size) {
