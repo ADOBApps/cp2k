@@ -60,4 +60,4 @@ void print_ri_info_flush(int unit_nr, const char* format, ...);
  */
 void print_error(const char* format, ...);
 
-#endif MP2_IO_BRIDGE_H
+#endif // MP2_IO_BRIDGE_H

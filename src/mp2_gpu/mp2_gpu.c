@@ -96,7 +96,8 @@ void c_mp2_ri_get_integ_group_size(
     const int maxsize_gd_B_virtual,
     const int maxval_gd_B_virtual,
     const int maxval_virtual,
-    const int max_homo
+    const int max_homo,
+    const int unit_nr
 ){
     // Local variables
     int block_size = 1;
@@ -178,6 +179,7 @@ void c_mp2_ri_get_integ_group_size(
     
     // Using printf for now - would use CP2K logging in production
     printf("RI_INFO| Minimum available memory per MPI process: %9.2f MiB\n", mem_real);
+    print_ri_info(unit_nr, "RI_INFO| Minimum available memory per MPI process: %9.2f MiB\n", mem_real);
     printf("RI_INFO| Minimum required memory per MPI process: %9.2f MiB\n", mem_min);
     printf("RI_INFO| Block size: %6d\n", block_size);
     printf("RI_INFO| Communication factor: %9.2f\n", factor);
@@ -821,7 +823,8 @@ void calc_ri_mp2_energy(
         maxsize_gd_B_virtual,
         maxval_gd_B_virtual,
         maxval_virtual,
-        max_homo
+        max_homo,
+        unit_nr
     );
 
     int comm_exchange_out = 0;

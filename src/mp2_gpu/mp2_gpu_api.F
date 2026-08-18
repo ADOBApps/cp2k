@@ -73,6 +73,7 @@ CONTAINS
       REAL(C_DOUBLE)  :: mp2_memory
       INTEGER(C_INT)  :: user_block_size
       LOGICAL(C_BOOL) :: calc_ex_c
+      INTEGER(C_INT)  :: unit_nr_c
 
 
       INTERFACE
@@ -143,6 +144,7 @@ CONTAINS
       maxval_gd_B_virtual = maxsize_gd_B_virtual
 
       calc_ex_c = calc_ex
+      unit_nr_c = unit_nr
 
       ! === KEEP ONLY _j FAMILY VARS ===============
       CALL calc_ri_mp2_energy_c( &
@@ -168,7 +170,7 @@ CONTAINS
          maxsize_gd_B_virtual, &
          maxval_gd_B_virtual, &
          calc_ex_c, &
-         unit_nr)
+         unit_nr_c)
       ! NULLIFY(BIb_C)
 
    END SUBROUTINE calc_ri_mp2_energy
