@@ -749,13 +749,13 @@ void fill_local_i_aL(
          */
         // local_i_aL(Lstart_pos:Lend_pos, :) = BIb_C_rec(start_point:end_point, :)
         // Each (i_block, v_pos) writes a different memcpy destination then I think is safe parallize
-        #ifdef _OPENMP
+       /* #ifdef _OPENMP
         // collapse(2) -> handles nested loops like single
         #pragma omp parallel for collapse(2) default(none) \
         shared(local_i_aL, BIb_C_rec, local_i_aL_block, local_i_aL_virtual, \
                local_i_aL_L_size, BIb_C_rec_virtual, BIb_C_rec_L_size, \
                start_point, Lstart_pos, L_size)
-        #endif
+        #endif */
          for (int i_block = 0; i_block < local_i_aL_block; i_block++) {
             for (int v_pos = 0; v_pos < local_i_aL_virtual; v_pos++) {
 
