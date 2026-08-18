@@ -70,7 +70,8 @@ void print_ri_info(int unit_nr, const char* format, ...) {
     }
 
     // Allocate output with "RI_INFO| " prefix and newline
-    const char* prefix = "RI_INFO| ";
+    // const char* prefix = "RI_INFO| ";
+    const char* prefix = " ";
     const char* suffix = "\n";
     size_t output_size = strlen(prefix) + written + strlen(suffix) + 1;
     char* output = (char*)malloc(output_size);
