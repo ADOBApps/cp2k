@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdlib.h>
 
 /**
  * Fortran subroutine interface for writing strings to Fortran units.
