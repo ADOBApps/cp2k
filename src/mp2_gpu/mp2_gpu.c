@@ -5,6 +5,8 @@
 /*  SPDX-License-Identifier: BSD-3-Clause                                     */
 /*----------------------------------------------------------------------------*/
 
+#define _POSIX_C_SOURCE 199309L
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -78,6 +80,18 @@ static int find_integ_group_size(int ngroup, int max_repl_group_size) {
         }
     }
     return integ_group_size;
+}
+
+/**
+ * Get current wall-clock time in seconds
+ * 
+ * Is like fotran's m_walltime()
+ * \return Current wall-clock time in seconds as a double
+ */
+static double m_walltime(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
 
 
@@ -179,14 +193,13 @@ void c_mp2_ri_get_integ_group_size(
     
     // Using printf for now - would use CP2K logging in production
     printf("RI_INFO| Minimum available memory per MPI process: %9.2f MiB\n", mem_real);
-    print_ri_info(unit_nr, "RI_INFO| Minimum available memory per MPI process: %9.2f MiB\n", mem_real);
     printf("RI_INFO| Minimum required memory per MPI process: %9.2f MiB\n", mem_min);
-    print_ri_info(unit_nr, "RI_INFO| Minimum required memory per MPI process: %9.2f MiB\n", mem_min);
     printf("RI_INFO| Block size: %6d\n", block_size);
-    print_ri_info(unit_nr, "RI_INFO| Block size: %6d\n", block_size);
     printf("RI_INFO| Communication factor: %9.2f\n", factor);
-    print_ri_info(unit_nr, "RI_INFO| Communication factor: %9.2f\n", factor);
     printf("RI_INFO| Group size for integral replication: %6d\n", integ_group_size);
+    print_ri_info(unit_nr, "RI_INFO| Minimum available memory per MPI process: %9.2f MiB\n", mem_real);
+    print_ri_info(unit_nr, "RI_INFO| Minimum required memory per MPI process: %9.2f MiB\n", mem_min);
+    print_ri_info(unit_nr, "RI_INFO| Block size: %6d\n", block_size);
     print_ri_info(unit_nr, "RI_INFO| Group size for integral replication: %6d\n", integ_group_size);
     fflush(stdout);
     
@@ -971,6 +984,8 @@ void calc_ri_mp2_energy(
     // integral part
     double integral;
     double divi_part;
+    // Counter
+    int decil;
     
     c_mp2_ri_allocate_blk(
         dimen_RI, my_B_size, block_size,
@@ -981,7 +996,23 @@ void calc_ri_mp2_energy(
     // Handle 2
     offload_timeset("mp2_ri_gpw_compute_en_RI_loop\0");
 
+    double t_start = m_walltime();
     for (int ij_index = 0; ij_index < max_ij_pairs; ij_index++) {
+
+        if (unit_nr > 0 && ij_index > 0) {
+            int current = ij_index + 1;
+            decil = current * 10 / max_ij_pairs;
+            if (decil != (ij_index) * 10 / max_ij_pairs) {
+                double t_new = m_walltime();
+                t_new + (t_new - t_start) / 60.0 * (max_ij_pairs - current + 1) / current;
+                print_ri_info(
+                    unit_nr,
+                    "Percentage of finished loop: %d%%. Minutes left: %.1f",
+                    decil * 10,
+                    t_new
+                );
+            }
+        }
 
         if (ij_index < my_ij_pairs) {
             // Get i, j, and block_size for this pair
