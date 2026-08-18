@@ -674,11 +674,11 @@ void c_mp2_ri_communication(
 
     if (unit_nr > 0) {
         if (block_size == 1) {
-            printf("RI_INFO| Percentage of ij pairs communicated with block size 1: 100.0\n");
+            printf("RI_INFO| Percentage of ij pairs communicated with block size 1:       100.0\n");
             print_ri_info(unit_nr, "RI_INFO| Percentage of ij pairs communicated with block size 1: 100.0\n");
         } else {
             double percentage = 100.0 * (double)((*total_ij_pairs - assigned_blocks * (block_size * block_size))) /  (double)(*total_ij_pairs);
-            printf("RI_INFO| Percentage of ij pairs communicated with block size 1: %g\n", percentage);
+            printf("RI_INFO| Percentage of ij pairs communicated with block size 1:       %g\n", percentage);
             print_ri_info(unit_nr, "RI_INFO| Percentage of ij pairs communicated with block size 1: %g\n", percentage);
         }
     }
@@ -1024,7 +1024,7 @@ void calc_ri_mp2_energy(
                 t_new = (t_new - t_start) / 60.0 * (max_ij_pairs - current + 1) / current;
                 print_ri_info(
                     unit_nr,
-                    "Percentage of finished loop:     %d%%                   . Minutes left: %g\n",
+                    "Percentage of finished loop:     %d%                   . Minutes left: %g\n",
                     decil * 10,
                     t_new
                 );
