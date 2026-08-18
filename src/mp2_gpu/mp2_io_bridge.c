@@ -65,7 +65,7 @@ void print_ri_info(int unit_nr, const char* format, ...) {
     va_end(args);
 
     if (written < 0 || buffer == NULL) {
-        write_to_fortran_unit(unit_nr, "RI_INFO| ERROR: Failed to format message\n");
+        write_to_fortran_unit(unit_nr, "  RI_INFO| ERROR: Failed to format message\n");
         return;
     }
 
@@ -79,7 +79,7 @@ void print_ri_info(int unit_nr, const char* format, ...) {
 
     if (output == NULL) {
         free(buffer);
-        write_to_fortran_unit(unit_nr, "RI_INFOR| ERROR: Memory allocation failed\n");
+        write_to_fortran_unit(unit_nr, "  RI_INFOR| ERROR: Memory allocation failed\n");
         return;
     }
     // snprintf(output, output_size, "%s%s%s", prefix, buffer, suffix);
@@ -117,7 +117,7 @@ void print_ri_info_flush(int unit_nr, const char* format, ...) {
     va_end(args);
 
     if (written < 0 || buffer == NULL) {
-        write_to_fortran_unit(unit_nr, "RI_INFO| ERROR: Failed to format message\n");
+        write_to_fortran_unit(unit_nr, "  RI_INFO| ERROR: Failed to format message\n");
         return;
     }
 

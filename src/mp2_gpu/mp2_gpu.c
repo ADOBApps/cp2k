@@ -181,9 +181,13 @@ void c_mp2_ri_get_integ_group_size(
     printf("RI_INFO| Minimum available memory per MPI process: %9.2f MiB\n", mem_real);
     print_ri_info(unit_nr, "RI_INFO| Minimum available memory per MPI process: %9.2f MiB\n", mem_real);
     printf("RI_INFO| Minimum required memory per MPI process: %9.2f MiB\n", mem_min);
+    print_ri_info(unit_nr, "RI_INFO| Minimum required memory per MPI process: %9.2f MiB\n", mem_min);
     printf("RI_INFO| Block size: %6d\n", block_size);
+    print_ri_info(unit_nr, "RI_INFO| Block size: %6d\n", block_size);
     printf("RI_INFO| Communication factor: %9.2f\n", factor);
+    print_ri_info(unit_nr, "RI_INFO| Communication factor: %9.2f\n", factor);
     printf("RI_INFO| Group size for integral replication: %6d\n", integ_group_size);
+    print_ri_info(unit_nr, "RI_INFO| Group size for integral replication: %6d\n", integ_group_size);
     fflush(stdout);
     
     
@@ -459,7 +463,8 @@ void c_mp2_ri_get_block_size(
     const int homo,
     const int maxval_virtual,
     const int dimen_RI,
-    const int num_integ_group
+    const int num_integ_group,
+    const int unit_nr
 ) {
     //Start timer
     offload_timeset("mp2_ri_get_block_size\0");
@@ -528,6 +533,7 @@ void c_mp2_ri_get_block_size(
     *block_size = (best_block_size < 1) ? 1 : best_block_size;
     
     printf("RI_INFO| Block size: %6d\n", *block_size);
+    print_ri_info(unit_nr, "RI_INFO| Block size: %6d\n", *block_size);
     fflush(stdout);
 
     // STEP 6: Allocate buffer
@@ -750,8 +756,6 @@ void calc_ri_mp2_energy(
     double *BIb_C,
     const double mp2_memory,
     const int user_block_size,
-    // const cp_mpi_comm_t comm_all_f,
-    // const cp_mpi_comm_t comm_sub_f,
     const cp_mpi_comm_t comm_all,
     const cp_mpi_comm_t comm_sub,
     const int color_sub,
@@ -925,7 +929,8 @@ void calc_ri_mp2_energy(
         homo,
         maxval_virtual,
         dimen_RI,
-        num_integ_group
+        num_integ_group,
+        unit_nr
     );
     
     // Communication pattern
