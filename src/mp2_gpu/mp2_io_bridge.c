@@ -71,9 +71,10 @@ void print_ri_info(int unit_nr, const char* format, ...) {
 
     // Allocate output with "RI_INFO| " prefix and newline
     // const char* prefix = "RI_INFO| ";
-    const char* prefix = " ";
-    const char* suffix = "\n";
-    size_t output_size = strlen(prefix) + written + strlen(suffix) + 1;
+    // const char* suffix = "\n";
+    // size_t output_size = strlen(prefix) + written + strlen(suffix) + 1;
+    const char* prefix = "  ";
+    size_t output_size = strlen(prefix) + written + 1;
     char* output = (char*)malloc(output_size);
 
     if (output == NULL) {
@@ -81,7 +82,8 @@ void print_ri_info(int unit_nr, const char* format, ...) {
         write_to_fortran_unit(unit_nr, "RI_INFOR| ERROR: Memory allocation failed\n");
         return;
     }
-    snprintf(output, output_size, "%s%s%s", prefix, buffer, suffix);
+    // snprintf(output, output_size, "%s%s%s", prefix, buffer, suffix);
+    snprintf(output, output_size, "%s%s", prefix, buffer);
     write_to_fortran_unit(unit_nr, output);
 
     free(buffer);
