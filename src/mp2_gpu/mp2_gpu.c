@@ -1004,7 +1004,7 @@ void calc_ri_mp2_energy(
             decil = current * 10 / max_ij_pairs;
             if (decil != (ij_index) * 10 / max_ij_pairs) {
                 double t_new = m_walltime();
-                t_new + (t_new - t_start) / 60.0 * (max_ij_pairs - current + 1) / current;
+                t_new = (t_new - t_start) / 60.0 * (max_ij_pairs - current + 1) / current;
                 print_ri_info(
                     unit_nr,
                     "Percentage of finished loop: %d%%. Minutes left: %.1f",
