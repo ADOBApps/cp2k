@@ -164,7 +164,8 @@ CONTAINS
             gd_array, &
             gd_B_virtual(1), &
             color_sub, &
-            calc_ex)
+            calc_ex, &
+            unit_nr)
          CALL timestop(handle)
          RETURN
       END IF

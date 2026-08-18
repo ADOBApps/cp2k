@@ -11,6 +11,7 @@ MODULE mp2_gpu_api
    USE message_passing,  ONLY: mp_comm_type, mp_para_env_type
    USE mp2_types,        ONLY: mp2_type
    USE group_dist_types, ONLY: group_dist_d1_type, get_group_dist, maxsize
+   USE mp2_io_bridge
 
    IMPLICIT NONE
 
@@ -36,7 +37,8 @@ CONTAINS
       gd_array, &
       gd_B_virtual, &
       color_sub, &
-      calc_ex)
+      calc_ex, &
+      unit_nr)
       REAL(KIND=dp), INTENT(OUT)                         :: E_cou
       REAL(KIND=dp), INTENT(OUT)                         :: E_ex
       REAL(KIND=dp), INTENT(OUT)                         :: E_s
@@ -59,6 +61,7 @@ CONTAINS
       TYPE(group_dist_d1_type), INTENT(IN)               :: gd_B_virtual
       INTEGER, INTENT(IN)                                :: color_sub
       LOGICAL, INTENT(IN)                                :: calc_ex
+      INTEGER, INTENT(IN)                                :: unit_nr
 
       INTEGER(C_INT)  :: comm_all_handle
       INTEGER(C_INT)  :: comm_sub_handle
@@ -95,7 +98,8 @@ CONTAINS
             maxsize_gd_array, &
             maxsize_gd_B_virtual, &
             maxval_gd_B_virtual, &
-            calc_ex_c)
+            calc_ex_c, &
+            unit_nr)
             IMPORT :: C_DOUBLE, C_INT, C_BOOL, C_PTR
             BIND(C, name="calc_ri_mp2_energy")
             REAL(C_DOUBLE)               :: E_cou
@@ -120,6 +124,7 @@ CONTAINS
             INTEGER(C_INT), VALUE        :: maxsize_gd_B_virtual
             INTEGER(C_INT), VALUE        :: maxval_gd_B_virtual
             LOGICAL(C_BOOL), VALUE       :: calc_ex_c
+            INTEGER(C_INT), VALUE        :: unit_nr
          END SUBROUTINE calc_ri_mp2_energy_c
       END INTERFACE
 
@@ -162,7 +167,8 @@ CONTAINS
          maxsize_gd_array, &
          maxsize_gd_B_virtual, &
          maxval_gd_B_virtual, &
-         calc_ex_c)
+         calc_ex_c, &
+         unit_nr)
       ! NULLIFY(BIb_C)
 
    END SUBROUTINE calc_ri_mp2_energy

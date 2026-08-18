@@ -19,6 +19,8 @@
 // I use it like a timer
 #include "../offload/offload_library.h"
 
+#include "mp2_io_bridge.h"
+
 /**
  * Helper: modulo operation that works like fortran MOD,
  * ensuring non-negative results.
@@ -762,7 +764,8 @@ void calc_ri_mp2_energy(
     const int maxsize_gd_array,
     const int maxsize_gd_B_virtual,
     const int maxval_gd_B_virtual,
-    bool calc_ex
+    const bool calc_ex,
+    const int unit_nr
 ) {
     // const cp_mpi_comm_t comm_all = cp_mpi_comm_f2c(comm_all_f);
     // const cp_mpi_comm_t comm_sub = cp_mpi_comm_f2c(comm_sub_f);
@@ -1464,7 +1467,8 @@ void calc_ri_mp2_energy_c_(
     const int maxsize_gd_array,
     const int maxsize_gd_B_virtual,
     const int maxval_gd_B_virtual,
-    const bool calc_ex
+    const bool calc_ex,
+    const int unit_nr
 ) {
     // Convert Fortran communicator handles to c
     cp_mpi_comm_t comm_all_c = cp_mpi_comm_f2c(comm_all_f);
@@ -1493,6 +1497,7 @@ void calc_ri_mp2_energy_c_(
         maxsize_gd_array,
         maxsize_gd_B_virtual,
         maxval_gd_B_virtual,
-        calc_ex
+        calc_ex,
+        unit_nr
     );
 }
