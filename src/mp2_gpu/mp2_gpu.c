@@ -570,7 +570,8 @@ void c_mp2_ri_communication(
     const int homo, const int block_size, const int ngroup, 
     const int color_sub, int* total_ij_pairs,
     int** ij_map, int* my_ij_pairs,
-    int* total_ij_pairs_blocks_out
+    int* total_ij_pairs_blocks_out,
+    const int unit_nr
 ){
     // start timer
     offload_timeset("mp2_ri_communication\0");
@@ -668,11 +669,15 @@ void c_mp2_ri_communication(
     assert (ij_counter == *total_ij_pairs);
     free(ij_marker);
 
-    if (block_size == 1) {
-        printf("RI_INFO| Percentage of ij pairs communicated with block size 1: 100.0\n");
-    } else {
-        double percentage = 100.0 * (double)((*total_ij_pairs - assigned_blocks * (block_size * block_size))) /  (double)(*total_ij_pairs);
-        printf("RI_INFO| Percentage of ij pairs communicated with block size 1: %.1f\n", percentage);
+    if (unit_nr > 0) {
+        if (block_size == 1) {
+            printf("RI_INFO| Percentage of ij pairs communicated with block size 1: 100.0\n");
+            print_ri_info(unit_nr, "RI_INFO| Percentage of ij pairs communicated with block size 1: 100.0\n");
+        } else {
+            double percentage = 100.0 * (double)((*total_ij_pairs - assigned_blocks * (block_size * block_size))) /  (double)(*total_ij_pairs);
+            printf("RI_INFO| Percentage of ij pairs communicated with block size 1: %g\n", percentage);
+            print_ri_info(unit_nr, "RI_INFO| Percentage of ij pairs communicated with block size 1: %g\n", percentage);
+        }
     }
 
     *total_ij_pairs_blocks_out = total_ij_pairs_blocks;
@@ -960,7 +965,8 @@ void calc_ri_mp2_energy(
         &total_ij_pairs,
         &ij_map,
         &my_ij_pairs,
-        &total_ij_pairs_blocks
+        &total_ij_pairs_blocks,
+        unit_nr
     );
             
     // Gather my_ij_pairs from all processes in exchange communicator
@@ -1007,7 +1013,7 @@ void calc_ri_mp2_energy(
                 t_new = (t_new - t_start) / 60.0 * (max_ij_pairs - current + 1) / current;
                 print_ri_info(
                     unit_nr,
-                    "Percentage of finished loop: %d%%. Minutes left: %g\n",
+                    "Percentage of finished loop:     %d%%                   . Minutes left: %g\n",
                     decil * 10,
                     t_new
                 );
