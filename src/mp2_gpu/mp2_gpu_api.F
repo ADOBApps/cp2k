@@ -11,7 +11,6 @@ MODULE mp2_gpu_api
    USE message_passing,  ONLY: mp_comm_type, mp_para_env_type
    USE mp2_types,        ONLY: mp2_type
    USE group_dist_types, ONLY: group_dist_d1_type, get_group_dist, maxsize
-   USE mp2_io_bridge
 
    IMPLICIT NONE
 
