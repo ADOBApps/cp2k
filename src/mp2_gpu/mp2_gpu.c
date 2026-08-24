@@ -20,6 +20,7 @@
 
 #include "../mpiwrap/cp_mpi.h"
 #include "gemm_c_api.h"
+#include "gemm_c_api_gpu.h"
 
 // I use it like a timer
 #include "../offload/offload_library.h"
@@ -261,7 +262,6 @@ void c_mp2_ri_create_group(
     int exchange_key = para_env_rank;
 
     // Create the exchange communicator
-    //
     cp_mpi_comm_split(comm_para_env_c_comm, sub_sub_color_exchange, exchange_key, &comm_exchange_c);
     *comm_exchange_out = cp_mpi_comm_c2f(comm_exchange_c); // convert back to Fortran communicator
 
@@ -379,8 +379,6 @@ double* c_replicate_iaK_2intgroup(
             memcpy(&BIb_C_copy[dst_idx], &(BIb_C)[src_idx], current_L_size * sizeof(double));
         }
     }
-    // free(*BIb_C);
-    // free(BIb_C);
     
     // Allocate gather buffer: [comm_rep_size][max_L_size][my_B_size][homo]
     size_t gather_size = (size_t)comm_rep_size * max_L_size * my_B_size * homo;
@@ -800,12 +798,32 @@ void calc_ri_mp2_energy(
     const int maxsize_gd_B_virtual,
     const int maxval_gd_B_virtual,
     const bool calc_ex,
-    const int unit_nr
+    const int unit_nr,
+    const bool use_gpu
 ) {
     // const cp_mpi_comm_t comm_all = cp_mpi_comm_f2c(comm_all_f);
     // const cp_mpi_comm_t comm_sub = cp_mpi_comm_f2c(comm_sub_f);
 
-    gemm_ctx_t *ctx = gemm_ctx_create(GEMM_PU_HOST, GEMM_LIB_BLAS);
+        gemm_ctx_t *ctx = NULL;
+        gemm_ctx_gpu_t *ctx_gpu = NULL;
+        offloadStream_t gpu_stream = 0;
+
+    if (use_gpu) {
+        offload_init();
+        int device_count = offload_get_device_count();
+        if (device_count <= 0) {
+            print_ri_info(unit_nr, "RI_INFO| use_gpu requested but no GPU device found -- falling back to CPU BLAS");
+            ctx = gemm_ctx_create(GEMM_PU_HOST, GEMM_LIB_BLAS);
+        } else {
+            offload_set_chosen_device(0);
+            offload_activate_chosen_device();
+            offloadStreamCreate(&gpu_stream);
+            ctx_gpu = gemm_ctx_gpu_create(gpu_stream);
+            print_ri_info(unit_nr, "RI_INFO| Using GPU device 0 for GEMM (%s)", gemm_ctx_gpu_get_info(ctx_gpu));
+        }
+    } else {
+        ctx = gemm_ctx_create(GEMM_PU_HOST, GEMM_LIB_BLAS);
+    }
 
     offload_timeset("mp2_ri_gpw_compute_en\0");
     // Calcullate some var instead pass form fortran-side
@@ -1008,6 +1026,26 @@ void calc_ri_mp2_energy(
         dimen_RI, my_B_size, block_size,
         &local_i_aL, &local_j_aL
     );
+
+    // Persistent device buffers for the GPU GEMM path. Allocated once here,
+    // freed once at the end of the function -- kept resident across the
+    // whole ij_index loop rather than re-allocated per pair/per block-element,
+    // per the "keep data on GPU" design goal.
+    double* dev_local_i_aL = NULL;
+    double* dev_local_j_aL = NULL;
+    double* dev_local_ab = NULL;
+    double* dev_external_i_aL = NULL;
+    if (use_gpu && ctx_gpu) {
+        size_t local_aL_size = (size_t)block_size * my_B_size * dimen_RI * sizeof(double);
+        size_t local_ab_size = (size_t)virtual * my_B_size * sizeof(double);
+        // Sized for the worst case rec_B_size across the subgroup (rec_B_size
+        // is always <= maxval_gd_B_virtual by construction of gd_B_virtual).
+        size_t external_i_aL_size = (size_t)maxval_gd_B_virtual * dimen_RI * sizeof(double);
+        offloadMalloc((void**)&dev_local_i_aL, local_aL_size);
+        offloadMalloc((void**)&dev_local_j_aL, local_aL_size);
+        offloadMalloc((void**)&dev_local_ab, local_ab_size);
+        offloadMalloc((void**)&dev_external_i_aL, external_i_aL_size);
+    }
             
     // Loop over ij pairs (the main computational loop)
     // Handle 2
@@ -1076,6 +1114,10 @@ void calc_ri_mp2_energy(
                 L_size,                     // BIb_C_rec_L_size
                 my_B_size                   // BIb_C_rec_virtual
             );
+
+            // (moved: GPU upload now happens right before the iiB/jjB loop below,
+            // after ALL filling of local_i_aL/local_j_aL -- including data
+            // received from other ranks further down -- is complete)
 
             // Handle 3
             offload_timeset("mp2_ri_gpw_compute_en_RI_comm\0");
@@ -1248,6 +1290,12 @@ void calc_ri_mp2_energy(
             // Handle 3
             offload_timestop();
 
+            if (use_gpu && ctx_gpu) {
+                size_t local_aL_size = (size_t)my_block_size * my_B_size * dimen_RI * sizeof(double);
+                offloadMemcpyHtoD(dev_local_i_aL, local_i_aL, local_aL_size);
+                offloadMemcpyHtoD(dev_local_j_aL, local_j_aL, local_aL_size);
+            }
+
             // loop over the block elements
             for (int iiB = 0; iiB < my_block_size; iiB++) {
                 for (int jjB = 0; jjB < my_block_size; jjB++) {
@@ -1259,13 +1307,26 @@ void calc_ri_mp2_energy(
                     double* my_local_i_aL = &local_i_aL[(size_t)iiB * my_B_size * dimen_RI];
                     double* my_local_j_aL = &local_j_aL[(size_t)jjB * my_B_size * dimen_RI];
 
-                    gemm_ctx_dgemm(
-                        ctx, 'T', 'N',
-                        my_B_size, my_B_size, dimen_RI,
-                        1.0, my_local_i_aL, dimen_RI,
-                        my_local_j_aL, dimen_RI,
-                        0.0, &local_ab[0], my_B_size
-                    );
+                    if (use_gpu && ctx_gpu) {
+                        double* dev_my_local_i_aL = &dev_local_i_aL[(size_t)iiB * my_B_size * dimen_RI];
+                        double* dev_my_local_j_aL = &dev_local_j_aL[(size_t)jjB * my_B_size * dimen_RI];
+                        offloadMemset(dev_local_ab, 0, (size_t)virtual * my_B_size * sizeof(double));
+                        gemm_ctx_gpu_dgemm(
+                            ctx_gpu, 'T', 'N',
+                            my_B_size, my_B_size, dimen_RI,
+                            1.0, dev_my_local_i_aL, dimen_RI,
+                            dev_my_local_j_aL, dimen_RI,
+                            0.0, &dev_local_ab[0], my_B_size
+                        );
+                    } else {
+                        gemm_ctx_dgemm(
+                            ctx, 'T', 'N',
+                            my_B_size, my_B_size, dimen_RI,
+                            1.0, my_local_i_aL, dimen_RI,
+                            my_local_j_aL, dimen_RI,
+                            0.0, &local_ab[0], my_B_size
+                        );
+                    }
 
                     // Collect data from other processes in the subgroup
                     for (int proc_shift = 1; proc_shift < para_env_sub_size; proc_shift++) {
@@ -1295,20 +1356,50 @@ void calc_ri_mp2_energy(
                             comm_sub                            // Communicator
                         );
 
-                        gemm_ctx_dgemm(
-                            ctx, 'T', 'N',
-                            rec_B_size,
-                            my_B_size,
-                            dimen_RI,
-                            1.0,
-                            external_i_aL,
-                            dimen_RI,
-                            my_local_j_aL,
-                            dimen_RI,
-                            1.0,
-                            &local_ab[rec_B_virtual_start * my_B_size],
-                            my_B_size
-                        );
+                        // MPI must operate on host memory (buffer_1D / external_i_aL
+                        // above are host buffers) -- no way around that transfer.
+                        // For the GPU path, upload just-received external_i_aL and
+                        // run the accumulating (beta=1.0) GEMM on device instead.
+                        if (use_gpu && ctx_gpu) {
+                            double* dev_my_local_j_aL = &dev_local_j_aL[(size_t)jjB * my_B_size * dimen_RI];
+                            offloadMemcpyHtoD(dev_external_i_aL, external_i_aL, ext_size * sizeof(double));
+                            gemm_ctx_gpu_dgemm(
+                                ctx_gpu, 'T', 'N',
+                                rec_B_size,
+                                my_B_size,
+                                dimen_RI,
+                                1.0,
+                                dev_external_i_aL,
+                                dimen_RI,
+                                dev_my_local_j_aL,
+                                dimen_RI,
+                                1.0,
+                                &dev_local_ab[rec_B_virtual_start * my_B_size],
+                                my_B_size
+                            );
+                        } else {
+                            gemm_ctx_dgemm(
+                                ctx, 'T', 'N',
+                                rec_B_size,
+                                my_B_size,
+                                dimen_RI,
+                                1.0,
+                                external_i_aL,
+                                dimen_RI,
+                                my_local_j_aL,
+                                dimen_RI,
+                                1.0,
+                                &local_ab[rec_B_virtual_start * my_B_size],
+                                my_B_size
+                            );
+                        }
+                    }
+
+                    // GPU path: all GEMMs for this (iiB, jjB) block-element are done --
+                    // bring the assembled local_ab back to host once, before the energy
+                    // loop below reads it.
+                    if (use_gpu && ctx_gpu) {
+                        offloadMemcpyDtoH(local_ab, dev_local_ab, (size_t)virtual * my_B_size * sizeof(double));
                     }
 
                     offload_timeset("mp2_ri_gpw_compute_en_RI_ener\0");
@@ -1497,7 +1588,15 @@ void calc_ri_mp2_energy(
     cp_mpi_comm_free(&comm_exchange_c);
 
     // Destroy context for all libraries
-    gemm_ctx_destroy(ctx);
+    if (use_gpu && ctx_gpu) {
+        if (dev_local_i_aL) offloadFree(dev_local_i_aL);
+        if (dev_local_j_aL) offloadFree(dev_local_j_aL);
+        if (dev_local_ab) offloadFree(dev_local_ab);
+        if (dev_external_i_aL) offloadFree(dev_external_i_aL);
+        gemm_ctx_gpu_destroy(ctx_gpu);
+        offloadStreamDestroy(gpu_stream);
+    }
+    if (ctx) gemm_ctx_destroy(ctx);
     offload_timestop();
 }
 
@@ -1554,6 +1653,7 @@ void calc_ri_mp2_energy_c_(
         maxsize_gd_B_virtual,
         maxval_gd_B_virtual,
         calc_ex,
-        unit_nr
+        unit_nr,
+        false //disable GPU to avoid errors
     );
 }

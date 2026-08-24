@@ -1421,6 +1421,7 @@ list(
   sockets.c
   mp2_gpu/mp2_gpu.c
   mp2_gpu/gemm_c_api.c
+  mp2_gpu/gemm_c_api_gpu.c
   base/machine_cpuid.c
   base/openmp_trace.c
   base/openmp_trace.c
