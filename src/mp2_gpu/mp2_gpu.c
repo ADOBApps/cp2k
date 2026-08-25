@@ -1654,6 +1654,6 @@ void calc_ri_mp2_energy_c_(
         maxval_gd_B_virtual,
         calc_ex,
         unit_nr,
-        false //disable GPU to avoid errors
+        true
     );
 }
