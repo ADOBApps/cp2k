@@ -1146,6 +1146,7 @@ void calc_ri_mp2_energy(
 
                     // Assert bounds
                     printf("correction_send: %d\n", correction_send);
+                    printf("ij_index: %d\n", ij_index);
                     printf("ij_counter_send %d, total_ij_pairs_blocks: %d\n", ij_counter_send, total_ij_pairs);
                     fflush(stdout);
                     assert(ij_counter_send >= 0 && ij_counter_send < total_ij_pairs_blocks);
