@@ -1139,7 +1139,7 @@ void calc_ri_mp2_energy(
 
                 if (ij_index <= send_ij_index) {
                     // Calculate send indices for this ij pair
-                    int correction_send = (integ_group_pos2color_sub[proc_send] > 0) ? 1 : 0;
+                    int correction_send = (integ_group_pos2color_sub[proc_send] < 0) ? 1 : 0;
                     int ij_counter_send = (ij_index - correction_send) * ngroup + integ_group_pos2color_sub[proc_send];
                     // int ij_counter_send = ij_index * ngroup + integ_group_pos2color_sub[proc_send];
 
