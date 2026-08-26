@@ -1143,9 +1143,6 @@ void calc_ri_mp2_energy(
                     int ij_counter_send = (ij_index - correction_send) * ngroup + integ_group_pos2color_sub[proc_send];
                     // Original
                     // int ij_counter_send = ij_index * ngroup + integ_group_pos2color_sub[proc_send];
-                    if (ij_counter_send < 0 || ij_counter_send >= total_ij_pairs_blocks) {
-                        continue;
-                    }
 
                     // Assert bounds
                     printf("correction_send: %d\n\n", correction_send);
@@ -1514,9 +1511,6 @@ void calc_ri_mp2_energy(
                     // int ij_counter_send = (ij_index - 1) * ngroup + integ_group_pos2color_sub[proc_send];
                     int correction_send = (integ_group_pos2color_sub[proc_send] > 0) ? 1 : 0;
                     int ij_counter_send = (ij_index - correction_send) * ngroup + integ_group_pos2color_sub[proc_send];
-                    if (ij_counter_send < 0 || ij_counter_send >= total_ij_pairs_blocks) {
-                        continue;
-                    }
                     assert(ij_counter_send >= 0 && ij_counter_send < total_ij_pairs_blocks);
 
                     // int send_i = ij_map[0 * total_ij_pairs + ij_counter_send - 1];
