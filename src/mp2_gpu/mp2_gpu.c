@@ -1152,7 +1152,7 @@ void calc_ri_mp2_energy(
                     // printf("ij_index: %d\n\n", ij_index);
                     printf("ij_counter_send %d, total_ij_pairs_blocks: %d\n", ij_counter_send, total_ij_pairs);
                     fflush(stdout);
-                    assert(ij_counter_send >= 0 && ij_counter_send < total_ij_pairs_blocks);
+                    // assert(ij_counter_send >= 0 && ij_counter_send < total_ij_pairs_blocks);
 
                     int send_i = ij_map[0 * total_ij_pairs_blocks + ij_counter_send];
                     int send_j = ij_map[1 * total_ij_pairs_blocks + ij_counter_send];
@@ -1515,7 +1515,7 @@ void calc_ri_mp2_energy(
                     // int correction_send = (integ_group_pos2color_sub[proc_send] > 0) ? 1 : 0;
                     // int ij_counter_send = (ij_index - correction_send) * ngroup + integ_group_pos2color_sub[proc_send];
                     int ij_counter_send = (ij_index) * ngroup + integ_group_pos2color_sub[proc_send];
-                    // assert(ij_counter_send >= 0 && ij_counter_send < total_ij_pairs_blocks);s
+                    assert(ij_counter_send >= 0 && ij_counter_send < total_ij_pairs_blocks);
 
                     // int send_i = ij_map[0 * total_ij_pairs + ij_counter_send - 1];
                     // int send = ij_map[1 * total_ij_pairs + ij_counter_send - 1];
