@@ -1147,8 +1147,8 @@ void calc_ri_mp2_energy(
                     // int ij_counter_send = ij_index * ngroup + integ_group_pos2color_sub[proc_send];
 
                     // Assert bounds
-                    printf("correction_send: %d\n\n", correction_send);
-                    printf("ij_index: %d\n\n", ij_index);
+                    // printf("correction_send: %d\n\n", correction_send);
+                    // printf("ij_index: %d\n\n", ij_index);
                     printf("ij_counter_send %d, total_ij_pairs_blocks: %d\n", ij_counter_send, total_ij_pairs);
                     fflush(stdout);
                     assert(ij_counter_send >= 0 && ij_counter_send < total_ij_pairs_blocks);
